@@ -20,7 +20,7 @@ conda install -c conda-forge gym
 conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch 
 conda install -c conda-forge vpython
 ```
-Check out [Gym](https://anaconda.org/conda-forge/gym), [Pytorch](https://pytorch.org/), and [Vpython](https://anaconda.org/conda-forge/vpython).
+> Check out [Gym](https://anaconda.org/conda-forge/gym), [Pytorch](https://pytorch.org/), and [Vpython](https://anaconda.org/conda-forge/vpython).
 
 2. Clone the repositroy.
 ```bash
@@ -34,7 +34,7 @@ python main.py --env_id Quad-v0 --policy TD3
 
 
 ## TODO:
-- [ ] Update in README.md
+- [ ] Update README.md
 - [ ] Tensorboard
 - [ ] Gym wrappers
 - [ ] Evaluate un/pre-trained policy
