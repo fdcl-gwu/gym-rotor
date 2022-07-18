@@ -36,12 +36,11 @@ python main.py --env_id Quad-v0 --policy TD3
 ## TODO:
 - [ ] Update in README.md
 - [ ] Tensorboard
-- [ ] Gym Wrappers
+- [ ] Gym wrappers
 - [ ] Evaluate un/pre-trained policy
 - [ ] Test trained policy
 - [ ] Plot graphs from saved data
 - [ ] Resume training
-- [ ] Error: {np.round(state[0:3]*3.0, 5)
 
 
 ## Reference:
