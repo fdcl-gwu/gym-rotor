@@ -34,7 +34,7 @@ if __name__ == "__main__":
                     help='Simulation visualization (default: False)')
     # Args of Agents:
     parser.add_argument("--policy", default="TD3",
-                    help='Which algorithms? DDPG, TD3, or SAC (default: TD3)')
+                    help='Which algorithms? DDPG or TD3 (default: TD3)')
     parser.add_argument("--hidden_dim", default=256, type=int, 
                     help='Number of nodes in hidden layers (default: 256)')
     parser.add_argument('--discount', default=0.99, type=float, metavar='G',
