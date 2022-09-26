@@ -1,12 +1,14 @@
 import os
 import sys
 import torch
-import gym
-import gym_rotor
 import argparse
 import numpy as np
 from numpy import linalg
 from datetime import datetime
+
+import gym
+import gym_rotor
+from gym_rotor.envs.ctrl_wrapper import CtrlWrapper
 
 import algos.TD3 as TD3
 import algos.DDPG as DDPG
@@ -67,7 +69,8 @@ if __name__ == "__main__":
     print("-----------------------------------------")
 
     # Make OpenAI Gym environment:
-    env = gym.make(args.env_id)
+    # env = gym.make(args.env_id)
+    env = CtrlWrapper()
 
     # Set seed for random number generators:
     if args.seed:
@@ -150,16 +153,7 @@ if __name__ == "__main__":
             ).clip(min_act, max_act)
 
         # Perform action:
-        next_state, reward, done, _ = env.step(action)
-
-        # Reward func.:
-        if episode_timesteps == 1:
-            C_A = 0.0 
-        else:
-            C_A = 0.03 # for smooth control
-        reward -= C_A * (abs(prev_action - action)).sum()
-        reward = np.interp(reward, [0.0, 2.0], [0.0, 1.0]) # normalized into [0,1]
-        reward *= 0.1 # rescaled by a factor of 0.1
+        next_state, reward, done, _ = env.step(action, prev_action)
 
         # Episode termination:
         if episode_timesteps == args.max_steps:
@@ -177,7 +171,7 @@ if __name__ == "__main__":
             policy.train(replay_buffer, args.batch_size)
 
         if done: 
-            print(f"Total timestpes: {total_timesteps+1}, #Episode: {i_episode+1}, timestpes: {episode_timesteps}, Reward: {episode_reward:.3f}, Pos error: {np.round(state[0:3], 5)} ")
+            print(f"Total timestpes: {total_timesteps+1}, #Episode: {i_episode+1}, timestpes: {episode_timesteps}, Reward: {episode_reward:.3f}")
                         
             # Save best model:
             if episode_reward > max_total_reward:
