@@ -14,10 +14,10 @@ class QuadEnv(gym.Env):
     def __init__(self): 
 
         # Quadrotor parameters:
-        self.m = 1.735 # mass of quad, [kg]
-        self.d = 0.228 # arm length, [m]
+        self.m = 1.65 # mass of quad, [kg]
+        self.d = 0.23 # arm length, [m]
         self.J = np.diag([0.02, 0.02, 0.04]) # inertia matrix of quad, [kg m2]
-        self.C_TQ = 0.0135 # torques and thrusts coefficients
+        self.c_tf = 0.0135 # torques and thrusts coefficients
         self.g = 9.81  # standard gravity
 
         # Force and Moment:
@@ -30,15 +30,24 @@ class QuadEnv(gym.Env):
         self.f2 = self.f_each # thrust of each 2nd motor, [N]
         self.f3 = self.f_each # thrust of each 3rd motor, [N]
         self.f4 = self.f_each # thrust of each 4th motor, [N]
-
         self.M  = np.zeros(3) # magnitude of moment on quadrotor, [Nm]
 
+        self.fM = np.zeros((4, 1)) # Force-moment vector
+        self.forces_to_fM = np.array([
+            [1.0, 1.0, 1.0, 1.0],
+            [0.0, -self.d, 0.0, self.d],
+            [self.d, 0.0, -self.d, 0.0],
+            [-self.c_tf, self.c_tf, -self.c_tf, self.c_tf]
+        ]) # Conversion matrix of forces to force-moment 
+        self.fM_to_forces = np.linalg.inv(self.forces_to_fM)
+
         # Simulation parameters:
-        self.dt = 0.005 # discrete time step, t(2) - t(1), [sec]
+        self.freq = 200 # frequency [Hz]
+        self.dt = 1./self.freq # discrete timestep, t(2) - t(1), [sec]
         self.ode_integrator = "solve_ivp" # or "euler", ODE solvers
         self.R2D = 180/pi # [rad] to [deg]
         self.D2R = pi/180 # [deg] to [rad]
-        self.e3 = np.array([0.0, 0.0, 1.0])[np.newaxis].T 
+        self.e3 = np.array([0.0, 0.0, 1.0])
 
         # Commands:
         self.xd     = np.array([0.0, 0.0, -2.0]) # desired tracking position command, [m] 
@@ -102,38 +111,31 @@ class QuadEnv(gym.Env):
     def step(self, action):
 
         # Saturated actions:
-        self.f1 = np.clip(action[0], self.min_force, self.max_force) # [N]
-        self.f2 = np.clip(action[1], self.min_force, self.max_force) 
-        self.f3 = np.clip(action[2], self.min_force, self.max_force)
-        self.f4 = np.clip(action[3], self.min_force, self.max_force)
+        action = np.clip(action, self.min_force, self.max_force) # f1, f2, f3, f4
 
-        ForceMoment = np.array([[       1.0,       1.0,        1.0,       1.0],
-                                [       0.0,   -self.d,        0.0,    self.d],
-                                [    self.d,       0.0,    -self.d,       0.0],
-                                [-self.C_TQ, self.C_TQ, -self.C_TQ, self.C_TQ]]) \
-                    @ np.array([self.f1, self.f2, self.f3, self.f4])[np.newaxis].T
-        self.f = ForceMoment[0]   # [N]
-        self.M = ForceMoment[1:4] # [Nm]
+        # Convert each forces to force-moment:
+        self.fM = self.forces_to_fM @ action
+        self.f = self.fM[0]   # [N]
+        self.M = self.fM[1:4] # [Nm]        
 
         # States: (x[0:3]; v[3:6]; R_vec[6:15]; W[15:18])
         _state = (self.state).flatten()
-
-        x = np.array([_state[0], _state[1], _state[2]]).flatten() # [m]
-        v = np.array([_state[3], _state[4], _state[5]]).flatten() # [m/s]
+        x = np.array([_state[0], _state[1], _state[2]]) # [m]
+        v = np.array([_state[3], _state[4], _state[5]]) # [m/s]
         R_vec = np.array([_state[6],  _state[7],  _state[8],
                           _state[9],  _state[10], _state[11],
-                          _state[12], _state[13], _state[14]]).flatten() 
+                          _state[12], _state[13], _state[14]])
         R = R_vec.reshape(3, 3, order='F')
-        W = np.array([_state[15], _state[16], _state[17]]).flatten() # [rad/s]
+        W = np.array([_state[15], _state[16], _state[17]]) # [rad/s]
         _state = np.concatenate((x, v, R_vec, W), axis=0)
         
-        # Solve ODEs.
+        # Solve ODEs:
         if self.ode_integrator == "euler": # solve w/ Euler's Method
             # Equations of motion of the quadrotor UAV
             x_dot = v
             v_dot = self.g*self.e3 - self.f*R@self.e3/self.m
-            R_vec_dot = (R@self.hat(W)).reshape(9, 1, order='F')
-            W_dot = inv(self.J)@(-self.hat(W)@self.J@W[np.newaxis].T + self.M)
+            R_vec_dot = (R@self.hat(W)).reshape(1, 9, order='F')
+            W_dot = inv(self.J)@(-self.hat(W)@self.J@W + self.M)
             state_dot = np.concatenate([x_dot.flatten(), 
                                         v_dot.flatten(),                                                                          
                                         R_vec_dot.flatten(),
@@ -145,19 +147,19 @@ class QuadEnv(gym.Env):
             self.state = sol.y[:,-1]
          
         # Next states:
-        x = np.array([self.state[0], self.state[1], self.state[2]]).flatten() # [m]
-        v = np.array([self.state[3], self.state[4], self.state[5]]).flatten() # [m/s]
+        x = np.array([self.state[0], self.state[1], self.state[2]]) # [m]
+        v = np.array([self.state[3], self.state[4], self.state[5]]) # [m/s]
         R_vec = np.array([self.state[6], self.state[7], self.state[8],
                           self.state[9], self.state[10], self.state[11],
-                          self.state[12], self.state[13], self.state[14]]).flatten()
-        W = np.array([self.state[15], self.state[16], self.state[17]]).flatten() # [rad/s]
+                          self.state[12], self.state[13], self.state[14]])
+        W = np.array([self.state[15], self.state[16], self.state[17]]) # [rad/s]
 
         # Re-orthonormalize:
         ''' https://www.codefull.net/2017/07/orthonormalize-a-rotation-matrix/ '''
         R = R_vec.reshape(3, 3, order='F')
         u, s, vh = linalg.svd(R, full_matrices=False)
         R = u @ vh
-        R_vec = R.reshape(9, 1, order='F').flatten()
+        R_vec = R.reshape(1, 9, order='F').flatten()
         self.state = np.concatenate((x, v, R_vec, W), axis=0)
 
         # Reward function:
@@ -186,26 +188,13 @@ class QuadEnv(gym.Env):
             or abs(eulerAngles[1]) >= self.euler_max_threshold # theta
         )
 
-        # Compute the thrust of each motor from the total force and moment
-        ''' 
-        ForceMoment =  (0.25 * np.array([[ 1.0,         0.0,   2.0/self.d, -1.0/self.C_TQ],
-                                         [ 1.0, -2.0/self.d,        0.0,    1.0/self.C_TQ],
-                                         [ 1.0,         0.0,  -2.0/self.d, -1.0/self.C_TQ],
-                                         [ 1.0,  2.0/self.d,        0.0,    1.0/self.C_TQ]])) \
-                    @ np.array([self.f, self.M[0], self.M[1], self.M[2]], dtype=object)[np.newaxis].T
-        self.f1 = ForceMoment[0] # [N]
-        self.f2 = ForceMoment[1]
-        self.f3 = ForceMoment[2]
-        self.f4 = ForceMoment[3]
-        '''
-
         return np.array(self.state), reward, done, {}
 
 
     def reset(self):
         # Reset states:
         self.state = np.array(np.zeros(18))
-        self.state[6:15] = np.eye(3).reshape(1,9, order='F')
+        self.state[6:15] = np.eye(3).reshape(1, 9, order='F')
         _error = 0.1 # initial error
 
         # x, position:
@@ -255,20 +244,20 @@ class QuadEnv(gym.Env):
         # Rendering state:
         state_vis = (self.state).flatten()
 
-        x = np.array([state_vis[0], state_vis[1], state_vis[2]]).flatten() # [m]
-        v = np.array([state_vis[3], state_vis[4], state_vis[5]]).flatten() # [m/s]
+        x = np.array([state_vis[0], state_vis[1], state_vis[2]]) # [m]
+        v = np.array([state_vis[3], state_vis[4], state_vis[5]]) # [m/s]
         R_vec = np.array([state_vis[6], state_vis[7], state_vis[8],
                           state_vis[9], state_vis[10], state_vis[11],
-                          state_vis[12], state_vis[13], state_vis[14]]).flatten()
-        W = np.array([state_vis[15], state_vis[16], state_vis[17]]).flatten() # [rad/s]
+                          state_vis[12], state_vis[13], state_vis[14]])
+        W = np.array([state_vis[15], state_vis[16], state_vis[17]]) # [rad/s]
 
         quad_pos = x # [m]
         cmd_pos  = self.xd # [m]
 
         # Axis:
-        x_axis = np.array([state_vis[6], state_vis[7], state_vis[8]]).flatten()
-        y_axis = np.array([state_vis[9], state_vis[10], state_vis[11]]).flatten()
-        z_axis = np.array([state_vis[12], state_vis[13], state_vis[14]]).flatten()
+        x_axis = np.array([state_vis[6], state_vis[7], state_vis[8]])
+        y_axis = np.array([state_vis[9], state_vis[10], state_vis[11]])
+        z_axis = np.array([state_vis[12], state_vis[13], state_vis[14]])
 
         # Init:
         if self.viewer is None:
@@ -500,19 +489,19 @@ class QuadEnv(gym.Env):
 
     def EoM(self, t, state):
         # https://youtu.be/iS5JFuopQsA
-        x = np.array([state[0], state[1], state[2]]).flatten() # [m]
-        v = np.array([state[3], state[4], state[5]]).flatten() # [m/s]
+        x = np.array([state[0], state[1], state[2]]) # [m]
+        v = np.array([state[3], state[4], state[5]]) # [m/s]
         R_vec = np.array([state[6], state[7], state[8],
                           state[9], state[10], state[11],
-                          state[12], state[13], state[14]]).flatten()
+                          state[12], state[13], state[14]])
         R = R_vec.reshape(3, 3, order='F')
-        W = np.array([state[15], state[16], state[17]]).flatten() # [rad/s]
+        W = np.array([state[15], state[16], state[17]]) # [rad/s]
 
         # Equations of motion of the quadrotor UAV
         x_dot = v
         v_dot = self.g*self.e3 - self.f*R@self.e3/self.m
-        R_vec_dot = (R@self.hat(W)).reshape(9, 1, order='F')
-        W_dot = inv(self.J)@(-self.hat(W)@self.J@W[np.newaxis].T + self.M)
+        R_vec_dot = (R@self.hat(W)).reshape(1, 9, order='F')
+        W_dot = inv(self.J)@(-self.hat(W)@self.J@W + self.M)
 
         state_dot = np.concatenate([x_dot.flatten(), 
                                     v_dot.flatten(),                                                                          

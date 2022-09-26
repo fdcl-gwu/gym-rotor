@@ -1,13 +1,12 @@
+import os
+import sys
+import torch
 import gym
 import gym_rotor
+import argparse
 import numpy as np
 from numpy import linalg
-import math
 from datetime import datetime
-import argparse
-import torch
-import sys
-import os
 
 import algos.TD3 as TD3
 import algos.DDPG as DDPG
@@ -83,7 +82,7 @@ if __name__ == "__main__":
     min_act = env.action_space.low[0]
     max_act = env.action_space.high[0]
     avrg_act = (min_act+max_act)/2.0 
-    scale_act  = max_act-avrg_act # actor scaling
+    scale_act = max_act-avrg_act # actor scaling
 
     kwargs = {
         "state_dim" : state_dim,
