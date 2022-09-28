@@ -27,6 +27,8 @@ if __name__ == "__main__":
     # Args of Environment:
     parser.add_argument('--env_id', default="Quad-v0",
                     help='Name of OpenAI Gym environment (default: Quad-v0)')
+    parser.add_argument('--wrapper_id', default="CtrlWrapper",
+                    help='Name of wrapper (default: CtrlWrapper)')    
     parser.add_argument('--max_steps', default=3000, type=int,
                     help='Maximum number of steps in each episode (default: 3000)')
     parser.add_argument('--max_timesteps', default=int(1e8), type=int,
@@ -69,8 +71,10 @@ if __name__ == "__main__":
     print("-----------------------------------------")
 
     # Make OpenAI Gym environment:
-    # env = gym.make(args.env_id)
-    env = CtrlWrapper()
+    if args.wrapper_id == 'CtrlWrapper':
+        env = CtrlWrapper()
+    else:
+        env = gym.make(args.env_id)
 
     # Set seed for random number generators:
     if args.seed:

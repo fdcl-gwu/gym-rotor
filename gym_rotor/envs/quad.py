@@ -24,7 +24,7 @@ class QuadEnv(gym.Env):
         self.f = self.m * self.g # magnitude of total thrust to overcome  
                                  # gravity and mass (No air resistance), [N]
         self.f_each = self.m * self.g / 4.0 # thrust magnitude of each motor, [N]
-        self.min_force = 1.0 # minimum thrust of each motor, [N]
+        self.min_force = 0.0 # minimum thrust of each motor, [N]
         self.max_force = 2 * self.f_each # maximum thrust of each motor, [N]
         self.f1 = self.f_each # thrust of each 1st motor, [N]
         self.f2 = self.f_each # thrust of each 2nd motor, [N]
