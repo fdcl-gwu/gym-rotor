@@ -6,7 +6,6 @@ import numpy as np
 from numpy import linalg
 from numpy.linalg import inv
 from math import cos, sin, atan2, sqrt, pi
-from scipy.integrate import odeint, solve_ivp
 
 class QuadEnv(gym.Env):
     metadata = {'render.modes': ['human']}
@@ -44,7 +43,7 @@ class QuadEnv(gym.Env):
         # Simulation parameters:
         self.freq = 200 # frequency [Hz]
         self.dt = 1./self.freq # discrete timestep, t(2) - t(1), [sec]
-        self.ode_integrator = "solve_ivp" # or "euler", ODE solvers
+        self.ode_integrator = "euler" # or "euler", ODE solvers
         self.R2D = 180/pi # [rad] to [deg]
         self.D2R = pi/180 # [deg] to [rad]
         self.e3 = np.array([0.0, 0.0, 1.0])
@@ -55,23 +54,23 @@ class QuadEnv(gym.Env):
         self.b1d    = np.array([1.0, 0.0, 0.0]) # desired heading direction        
 
         # limits of states:
-        self.x_max_threshold = 3.0  # [m]
-        self.v_max_threshold = 10.0 # [m/s]
-        self.W_max_threshold = 2.0  # [rad/s]
-        self.euler_max_threshold = 80 * self.D2R # [rad]
+        self.x_max_threshold = 3.0 # [m]
+        self.v_max_threshold = 5.0 # [m/s]
+        self.W_max_threshold = 5.0 # [rad/s]
+        self.euler_max_threshold = 90 # [deg]
 
-        self.limits_x     = np.array([self.x_max_threshold, self.x_max_threshold, self.x_max_threshold]) # [m]
-        self.limits_v     = np.array([self.v_max_threshold, self.v_max_threshold, self.v_max_threshold]) # [m/s]
-        self.limits_R_vec = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
-        self.limits_W     = np.array([self.W_max_threshold, self.W_max_threshold, self.W_max_threshold]) # [rad/s]
+        self.limits_x = self.x_max_threshold * np.ones(3) # [m]
+        self.limits_v = self.v_max_threshold * np.ones(3) # [m/s]
+        self.limits_R = np.ones(9) 
+        self.limits_W = self.W_max_threshold * np.ones(3) # [rad/s]
 
         self.low = np.concatenate([-self.limits_x,  
                                    -self.limits_v,
-                                   -self.limits_R_vec,
+                                   -self.limits_R,
                                    -self.limits_W])
         self.high = np.concatenate([self.limits_x,  
                                     self.limits_v,
-                                    self.limits_R_vec,
+                                    self.limits_R,
                                     self.limits_W])
 
         # Observation space:
@@ -123,35 +122,10 @@ class QuadEnv(gym.Env):
         self.M = self.fM[1:4] # [Nm]        
 
         # States: (x[0:3]; v[3:6]; R_vec[6:15]; W[15:18])
-        _state = (self.state).flatten()
-        
-        # Solve ODEs:
-        if self.ode_integrator == "euler": # solve w/ Euler's Method
-            x = np.array([_state[0], _state[1], _state[2]]) # [m]
-            v = np.array([_state[3], _state[4], _state[5]]) # [m/s]
-            R_vec = np.array([_state[6],  _state[7],  _state[8],
-                              _state[9],  _state[10], _state[11],
-                              _state[12], _state[13], _state[14]])
-            R = R_vec.reshape(3, 3, order='F')
-            W = np.array([_state[15], _state[16], _state[17]]) # [rad/s]
-
-            # Equations of motion of the quadrotor UAV
-            x_dot = v
-            v_dot = self.g*self.e3 - self.f*R@self.e3/self.m
-            R_vec_dot = (R@self.hat(W)).reshape(1, 9, order='F')
-            W_dot = inv(self.J)@(-self.hat(W)@self.J@W + self.M)
-            state_dot = np.concatenate([x_dot.flatten(), 
-                                        v_dot.flatten(),                                                                          
-                                        R_vec_dot.flatten(),
-                                        W_dot.flatten()])
-            self.state = _state + state_dot * self.dt
-        elif self.ode_integrator == "solve_ivp": # solve w/ 'solve_ivp' Solver
-            # method= 'RK45', 'LSODA', 'BDF', 'LSODA', ...
-            sol = solve_ivp(self.EoM, [0, self.dt], _state, method='DOP853')
-            self.state = sol.y[:,-1]
-         
+        state = (self.state).flatten()
+                 
         # Observation:
-        obs = self.observation_wrapper(self.state)
+        obs = self.observation_wrapper(state)
 
         # Reward function:
         reward = self.reward_wrapper(obs, action, prev_action)
@@ -421,16 +395,6 @@ class QuadEnv(gym.Env):
         return True
 
 
-    def close(self):
-        if self.viewer:
-            self.viewer = None
-
-
-    def seed(self, seed=None):
-        self.np_random, seed = seeding.np_random(seed)
-        return [seed]
-
-
     def EoM(self, t, state):
         # https://youtu.be/iS5JFuopQsA
         x = np.array([state[0], state[1], state[2]]) # [m]
@@ -501,10 +465,7 @@ class QuadEnv(gym.Env):
 
 
     def rotationMatrixToEulerAngles(self, R):
-        # Calculates rotation matrix to euler angles
-        # The result is the same as MATLAB except the order
-        # of the euler angles ( x and z are swapped ).
-
+        # Calculates rotation matrix to euler angles.
         assert(self.isRotationMatrix(R))
 
         sy = sqrt(R[0,0] * R[0,0] +  R[1,0] * R[1,0])
@@ -521,3 +482,13 @@ class QuadEnv(gym.Env):
             z = 0
 
         return np.array([x, y, z])
+
+
+    def close(self):
+        if self.viewer:
+            self.viewer = None
+
+
+    def seed(self, seed=None):
+        self.np_random, seed = seeding.np_random(seed)
+        return [seed]

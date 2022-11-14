@@ -28,7 +28,7 @@ if __name__ == "__main__":
     parser.add_argument('--env_id', default="Quad-v0",
                     help='Name of OpenAI Gym environment (default: Quad-v0)')
     parser.add_argument('--wrapper_id', default="CtrlWrapper",
-                    help='Name of wrapper (default: CtrlWrapper)')    
+                    help='Name of wrapper (default: "CtrlWrapper")')    
     parser.add_argument('--max_steps', default=3000, type=int,
                     help='Maximum number of steps in each episode (default: 3000)')
     parser.add_argument('--max_timesteps', default=int(1e8), type=int,
@@ -71,7 +71,7 @@ if __name__ == "__main__":
     print("-----------------------------------------")
 
     # Make OpenAI Gym environment:
-    if args.wrapper_id == 'CtrlWrapper':
+    if args.wrapper_id == "CtrlWrapper":
         env = CtrlWrapper()
     else:
         env = gym.make(args.env_id)
@@ -159,6 +159,10 @@ if __name__ == "__main__":
         # Perform action:
         next_state, reward, done, _ = env.step(action, prev_action)
 
+        # 3D visualization:
+        if args.render == True:
+            env.render()
+
         # Episode termination:
         if episode_timesteps == args.max_steps:
             done = True
@@ -167,12 +171,12 @@ if __name__ == "__main__":
         # Store a set of transitions in replay buffer
         replay_buffer.add(state, action, next_state, reward, done_bool)
 
-        state = next_state
-        episode_reward += reward
-
         # Train agent after collecting sufficient data:
         if total_timesteps >= args.start_timesteps:
             policy.train(replay_buffer, args.batch_size)
+
+        state = next_state
+        episode_reward += reward
 
         if done: 
             print(f"Total timestpes: {total_timesteps+1}, #Episode: {i_episode+1}, timestpes: {episode_timesteps}, Reward: {episode_reward:.3f}")
