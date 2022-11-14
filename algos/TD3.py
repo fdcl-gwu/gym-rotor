@@ -67,8 +67,8 @@ class Critic(nn.Module):
 
 class TD3(object):
     def __init__(self, state_dim, action_dim, hidden_dim, \
-                        max_act, min_act, avrg_act, scale_act, \
-                        discount, lr, tau, target_noise, noise_clip, policy_update_freq):
+                       max_act, min_act, avrg_act, scale_act, \
+                       discount, lr, tau, target_noise, noise_clip, policy_update_freq):
 
         self.actor = Actor(state_dim, action_dim, hidden_dim, max_act, min_act, avrg_act, scale_act).to(device)
         self.actor_target = copy.deepcopy(self.actor)

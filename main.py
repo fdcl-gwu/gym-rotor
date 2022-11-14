@@ -98,7 +98,7 @@ if __name__ == "__main__":
         "min_act": min_act,
         "max_act": max_act,
         "avrg_act": avrg_act,
-        "scale_act" : scale_act,
+        "scale_act": scale_act,
         "discount": args.discount,
         "lr": args.lr,
         "tau": args.tau,

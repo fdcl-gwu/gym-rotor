@@ -13,7 +13,7 @@ class QuadEnv(gym.Env):
     def __init__(self): 
 
         # Quadrotor parameters:
-        self.m = 1.65 # mass of quad, [kg]
+        self.m = 1.85 # mass of quad, [kg]
         self.d = 0.23 # arm length, [m]
         self.J = np.diag([0.02, 0.02, 0.04]) # inertia matrix of quad, [kg m2]
         self.c_tf = 0.0135 # torques and thrusts coefficients
@@ -43,7 +43,7 @@ class QuadEnv(gym.Env):
         # Simulation parameters:
         self.freq = 200 # frequency [Hz]
         self.dt = 1./self.freq # discrete timestep, t(2) - t(1), [sec]
-        self.ode_integrator = "euler" # or "euler", ODE solvers
+        self.ode_integrator = "solve_ivp" # or "euler", ODE solvers
         self.R2D = 180/pi # [rad] to [deg]
         self.D2R = pi/180 # [deg] to [rad]
         self.e3 = np.array([0.0, 0.0, 1.0])
@@ -410,7 +410,6 @@ class QuadEnv(gym.Env):
         v_dot = self.g*self.e3 - self.f*R@self.e3/self.m
         R_vec_dot = (R@self.hat(W)).reshape(1, 9, order='F')
         W_dot = inv(self.J)@(-self.hat(W)@self.J@W + self.M)
-
         state_dot = np.concatenate([x_dot.flatten(), 
                                     v_dot.flatten(),                                                                          
                                     R_vec_dot.flatten(),

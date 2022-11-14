@@ -157,7 +157,7 @@ class CtrlWrapper(QuadEnv):
         C_X = 2.0  # pos coef.
         C_V = 0.15 # vel coef.
         C_W = 0.2  # ang_vel coef.
-        C_A = 0.03 # for smooth control
+        C_A = 0.001 # 0.03; for smooth control
 
         eX = x - self.xd     # position error
         eV = v - self.xd_dot # velocity error
@@ -175,14 +175,18 @@ class CtrlWrapper(QuadEnv):
     def done_wrapper(self, obs):
         x = np.array([obs[0], obs[1], obs[2]]) # [m]
         v = np.array([obs[3], obs[4], obs[5]]) # [m/s]
+        '''
         R_vec = np.array([obs[6],  obs[7],  obs[8],
                           obs[9],  obs[10], obs[11],
                           obs[12], obs[13], obs[14]])
         R = R_vec.reshape(3, 3, order='F')
+        '''
         W = np.array([obs[15], obs[16], obs[17]]) # [rad/s]
 
         # Convert rotation matrix to Euler angles:
-        #eulerAngles = self.rotationMatrixToEulerAngles(R) * self.R2D
+        '''
+        eulerAngles = self.rotationMatrixToEulerAngles(R) * self.R2D
+        '''
         
         done = False
         done = bool(
@@ -192,5 +196,8 @@ class CtrlWrapper(QuadEnv):
             # or abs(eulerAngles[0]) >= self.euler_max_threshold # phi
             # or abs(eulerAngles[1]) >= self.euler_max_threshold # theta
         )
+
+        if done:
+            print(obs)
 
         return done
