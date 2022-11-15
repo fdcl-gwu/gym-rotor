@@ -32,7 +32,7 @@ class CtrlWrapper(QuadEnv):
         v = np.array([self.state[3], self.state[4], self.state[5]]) # [m/s]
 
         # R, attitude:
-        init_R_error = (self.euler_max_threshold - 10.0) * self.D2R # minus 10deg
+        init_R_error = (self.euler_max_threshold - 30.0) * self.D2R # minus 30deg
         phi   = np.random.uniform(size = 1, low = -init_R_error, high = init_R_error)
         theta = np.random.uniform(size = 1, low = -init_R_error, high = init_R_error)
         psi   = np.random.uniform(size = 1, low = -init_R_error, high = init_R_error)
@@ -196,8 +196,5 @@ class CtrlWrapper(QuadEnv):
             # or abs(eulerAngles[0]) >= self.euler_max_threshold # phi
             # or abs(eulerAngles[1]) >= self.euler_max_threshold # theta
         )
-
-        if done:
-            print(obs)
 
         return done

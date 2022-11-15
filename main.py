@@ -13,6 +13,7 @@ from gym_rotor.envs.ctrl_wrapper import CtrlWrapper
 import algos.TD3 as TD3
 import algos.DDPG as DDPG
 import utils.replay_buffer as replay
+from utils.eval_agent import eval_agent
 
 if __name__ == "__main__":
 	
@@ -21,7 +22,11 @@ if __name__ == "__main__":
     parser.add_argument("--save_model", default=True, action="store_true",
                     help='Save models and optimizer parameters (default: True)')
     parser.add_argument("--load_model", default=False, type=bool,
-                    help='Load trained models and optimizer parameters (default: False)')                    
+                    help='Load and test trained models (default: False)')   
+    parser.add_argument("--save_log", default=False, type=bool,
+                    help='Load trained models and save log(default: False)')      
+    parser.add_argument("--eval_freq", default=5e3, type=int,
+                    help='How often (time steps) evaluate our trained model')       
     parser.add_argument('--seed', default=123, type=int, metavar='N',
                     help='Random seed of Gym, PyTorch and Numpy (default: 123)')      
     # Args of Environment:
@@ -115,6 +120,16 @@ if __name__ == "__main__":
     # Set experience replay buffer:
     replay_buffer = replay.ReplayBuffer(state_dim, action_dim, args.replay_buffer_size)
 
+    # Setup loggers:
+    if not os.path.exists("./results"):
+        os.makedirs("./results")
+    log_epi_path  = os.path.join("./results", "log_epi.txt") 
+    log_step_path = os.path.join("./results", "log_step.txt")   
+    log_eval_path = os.path.join("./results", "log_eval.txt")   
+    log_epi  = open(log_epi_path, "w+")  # no. episode vs. Total reward vs. Each timesteps
+    log_step = open(log_step_path, "w+") # Total timesteps vs. Total reward
+    log_eval = open(log_eval_path,"w+")  # Total timesteps vs. Evaluated average reward
+
     # Save models and optimizer parameters:
     file_name = f"{args.policy}_{args.env_id}"
     if args.save_model and not os.path.exists("./models"):
@@ -124,22 +139,20 @@ if __name__ == "__main__":
     # Load trained models and optimizer parameters:
     if args.load_model == True:
         policy.load(f"./models/{file_name + '_best'}")
-
-    # Setup loggers:
-    if not os.path.exists("./results"):
-        os.makedirs("./results")
-
-    log_epi_path  = os.path.join("./results", "log_epi.txt") 
-    log_step_path = os.path.join("./results", "log_step.txt")   
-    log_epi  = open(log_epi_path, "w+")  # no. episode vs. Total reward vs. Each timesteps
-    log_step = open(log_step_path, "w+") # Total timesteps vs. Total reward
     
+    # Evaluate policy
+    eval_policy = [eval_agent(policy, args.env_id, args.wrapper_id, args.save_log, \
+                              args.max_steps, avrg_act, args.seed)]
+    if args.load_model == True:
+        sys.exit("The trained model has been test!")
+
     # Initialize environment:
     state, done = env.reset(), False
+    action = avrg_act * np.ones(4)
     i_episode = 0
+    i_eval = 1  
     episode_reward = 0
     episode_timesteps = 0
-    action = avrg_act * np.ones(4)  
 
     # Training loop:
     for total_timesteps in range(int(args.max_timesteps)):
@@ -199,9 +212,19 @@ if __name__ == "__main__":
 
             # Reset environment:
             state, done = env.reset(), False
+            action = avrg_act * np.ones(4)  
             i_episode += 1 
             episode_reward = 0
             episode_timesteps = 0
-            action = avrg_act * np.ones(4)  
+
+        # Evaluate episode
+        if (total_timesteps+1) % args.eval_freq == 0:
+            if total_timesteps >= args.start_timesteps:
+                eval_policy.append(eval_agent(policy, args.env_id, args.wrapper_id, args.save_log, \
+                                              args.max_steps, avrg_act, args.seed))
+                # Logging updates:
+                log_eval.write('{}\t {}\n'.format(total_timesteps+1, eval_policy[i_eval]))
+                log_eval.flush()
+                i_eval += 1
             if args.save_model: 
                 policy.save(f"./models/{file_name}")
