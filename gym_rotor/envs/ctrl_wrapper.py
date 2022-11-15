@@ -157,15 +157,15 @@ class CtrlWrapper(QuadEnv):
         C_X = 2.0  # pos coef.
         C_V = 0.15 # vel coef.
         C_W = 0.2  # ang_vel coef.
-        C_A = 0.001 # 0.03; for smooth control
+        C_A = 0.03 # for smooth control
 
         eX = x - self.xd     # position error
         eV = v - self.xd_dot # velocity error
    
         reward = C_X*max(0, 1.0 - linalg.norm(eX, 2)) \
-                - C_V * linalg.norm(eV, 2) \
-                - C_W * linalg.norm(W, 2) \
-                - C_A * (abs(prev_action - action)).sum()
+               - C_V * linalg.norm(eV, 2) \
+               - C_W * linalg.norm(W, 2) \
+               - C_A * (abs(prev_action - action)).sum()
         # reward = np.interp(reward, [0.0, C_X], [0.0, 1.0]) # normalized into [0,1]
         reward *= 0.1 # rescaled by a factor of 0.1
         

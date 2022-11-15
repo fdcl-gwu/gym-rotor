@@ -139,3 +139,4 @@ dmypy.json
 # gym-rotor
 models/
 results/
+*.dat

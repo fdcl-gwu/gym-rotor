@@ -8,18 +8,18 @@ log_date = np.loadtxt('log_11-15-2022_15-13-27.dat')
 start_index = 3
 end_index = 87
 time_now = datetime.now().strftime("%H-%M-%S-%m-%d-%Y")
-is_SAVE = False
+is_SAVE = True
 
 # limits of states
 x_max_threshold = 3.0  # [m]
-v_max_threshold = 3.0 # [m/s]
+v_max_threshold = 5.0 # [m/s]
 W_max_threshold = 5.0 # [rad/s]
 
 # Loading Saved Data
 load_act  = log_date[:, 0:4] # automatically discards the headers
 load_obs  = log_date[:, 4:] 
-obs  = load_obs[start_index-2: end_index-2]
 act  = load_act[start_index-2: end_index-2]
+obs  = load_obs[start_index-2: end_index-2]
 
 # pre_processing
 # Actions
