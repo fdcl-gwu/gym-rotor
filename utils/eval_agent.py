@@ -4,15 +4,16 @@ from datetime import datetime
 
 import gym
 import gym_rotor
-from gym_rotor.envs.ctrl_wrapper import CtrlWrapper
+from gym_rotor.envs.eval_wrapper import EvalWrapperCtrl
+from gym_rotor.envs.eval_wrapper import EvalWrapperEquiv
 
 # Runs policy for n episodes and returns average reward.
-def eval_agent(policy, env_id, wrapper_id, save_log, max_steps, avrg_act, seed):
+def eval_agent(policy, wrapper_id, save_log, max_steps, avrg_act, seed):
     # Make OpenAI Gym environment:
     if wrapper_id == "CtrlWrapper":
-        eval_env = CtrlWrapper()
-    else:
-        eval_env = gym.make(env_id)
+        eval_env = EvalWrapperCtrl()
+    elif wrapper_id == "EquivWrapper":
+        eval_env = EvalWrapperEquiv()
 
     # Fixed seed is used for the eval environment.
     eval_env.seed(seed)

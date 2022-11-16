@@ -19,23 +19,23 @@ class CtrlWrapper(QuadEnv):
 
         # x, position:
         init_x = self.x_max_threshold - 0.5 # minus 0.5m
-        self.state[0] = np.random.uniform(size = 1, low = -init_x, high = init_x) 
-        self.state[1] = np.random.uniform(size = 1, low = -init_x, high = init_x) 
-        self.state[2] = np.random.uniform(size = 1, low = -init_x, high = init_x)
+        self.state[0] = np.random.uniform(size=1, low=-init_x, high=init_x) 
+        self.state[1] = np.random.uniform(size=1, low=-init_x, high=init_x) 
+        self.state[2] = np.random.uniform(size=1, low=-init_x, high=init_x)
         x = np.array([self.state[0], self.state[1], self.state[2]]) # [m]
 
         # v, velocity:
-        init_v_error = 0.2 # initial vel error, [m/s]
-        self.state[3] = np.random.uniform(size = 1, low = -init_v_error, high = init_v_error) 
-        self.state[4] = np.random.uniform(size = 1, low = -init_v_error, high = init_v_error) 
-        self.state[5] = np.random.uniform(size = 1, low = -init_v_error, high = init_v_error)
+        init_v_error = 0.3 # initial vel error, [m/s]
+        self.state[3] = np.random.uniform(size=1, low=-init_v_error, high=init_v_error) 
+        self.state[4] = np.random.uniform(size=1, low=-init_v_error, high=init_v_error) 
+        self.state[5] = np.random.uniform(size=1, low=-init_v_error, high=init_v_error)
         v = np.array([self.state[3], self.state[4], self.state[5]]) # [m/s]
 
         # R, attitude:
         init_R_error = (self.euler_max_threshold - 30.0) * self.D2R # minus 30deg
-        phi   = np.random.uniform(size = 1, low = -init_R_error, high = init_R_error)
-        theta = np.random.uniform(size = 1, low = -init_R_error, high = init_R_error)
-        psi   = np.random.uniform(size = 1, low = -init_R_error, high = init_R_error)
+        phi   = np.random.uniform(size=1, low=-init_R_error, high=init_R_error)
+        theta = np.random.uniform(size=1, low=-init_R_error, high=init_R_error)
+        psi   = np.random.uniform(size=1, low=-init_R_error, high=init_R_error)
         # NED; https://www.wilselby.com/research/arducopter/modeling/
         self.state[6]  = cos(theta)*cos(psi)
         self.state[7]  = cos(theta)*sin(psi) 
@@ -59,10 +59,10 @@ class CtrlWrapper(QuadEnv):
             R_vec = R.reshape(9, 1, order='F').flatten()
 
         # W, angular velocity:
-        init_W_error = 0.2 # initial ang vel error, [rad/s]
-        self.state[15] = np.random.uniform(size = 1, low = -init_W_error, high = init_W_error) 
-        self.state[16] = np.random.uniform(size = 1, low = -init_W_error, high = init_W_error) 
-        self.state[17] = np.random.uniform(size = 1, low = -init_W_error, high = init_W_error) 
+        init_W_error = 0.3 # initial ang vel error, [rad/s]
+        self.state[15] = np.random.uniform(size=1, low=-init_W_error, high=init_W_error) 
+        self.state[16] = np.random.uniform(size=1, low=-init_W_error, high=init_W_error) 
+        self.state[17] = np.random.uniform(size=1, low=-init_W_error, high=init_W_error) 
         W = np.array([self.state[15], self.state[16], self.state[17]]) # [rad/s]
 
         # Normalization
@@ -175,26 +175,22 @@ class CtrlWrapper(QuadEnv):
     def done_wrapper(self, obs):
         x = np.array([obs[0], obs[1], obs[2]]) # [m]
         v = np.array([obs[3], obs[4], obs[5]]) # [m/s]
-        '''
         R_vec = np.array([obs[6],  obs[7],  obs[8],
                           obs[9],  obs[10], obs[11],
                           obs[12], obs[13], obs[14]])
         R = R_vec.reshape(3, 3, order='F')
-        '''
         W = np.array([obs[15], obs[16], obs[17]]) # [rad/s]
 
         # Convert rotation matrix to Euler angles:
-        '''
         eulerAngles = self.rotationMatrixToEulerAngles(R) * self.R2D
-        '''
         
         done = False
         done = bool(
                (abs(x) >= 1.0).any() # [m]
-            or (abs(v) >= 1.0).any() # [m/s]
-            or (abs(W) >= 1.0).any() # [rad/s]
-            # or abs(eulerAngles[0]) >= self.euler_max_threshold # phi
-            # or abs(eulerAngles[1]) >= self.euler_max_threshold # theta
+            # or (abs(v) >= 1.0).any() # [m/s]
+            # or (abs(W) >= 1.0).any() # [rad/s]
+            or abs(eulerAngles[0]) >= self.euler_max_threshold # phi
+            or abs(eulerAngles[1]) >= self.euler_max_threshold # theta
         )
 
         return done

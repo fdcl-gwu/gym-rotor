@@ -141,8 +141,7 @@ if __name__ == "__main__":
         policy.load(f"./models/{file_name + '_best'}")
     
     # Evaluate policy
-    eval_policy = [eval_agent(policy, args.env_id, args.wrapper_id, args.save_log, \
-                              args.max_steps, avrg_act, args.seed)]
+    eval_policy = [eval_agent(policy, args.wrapper_id, args.save_log, args.max_steps, avrg_act, args.seed)]
     if args.load_model == True:
         sys.exit("The trained model has been test!")
 
@@ -220,7 +219,7 @@ if __name__ == "__main__":
         # Evaluate episode
         if (total_timesteps+1) % args.eval_freq == 0:
             if total_timesteps >= args.start_timesteps:
-                eval_policy.append(eval_agent(policy, args.env_id, args.wrapper_id, args.save_log, \
+                eval_policy.append(eval_agent(policy, args.wrapper_id, args.save_log, \
                                               args.max_steps, avrg_act, args.seed))
                 # Logging updates:
                 log_eval.write('{}\t {}\n'.format(total_timesteps+1, eval_policy[i_eval]))

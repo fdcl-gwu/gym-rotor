@@ -23,8 +23,8 @@ class QuadEnv(gym.Env):
         self.f = self.m * self.g # magnitude of total thrust to overcome  
                                  # gravity and mass (No air resistance), [N]
         self.f_each = self.m * self.g / 4.0 # thrust magnitude of each motor, [N]
-        self.min_force = 0.0 # minimum thrust of each motor, [N]
-        self.max_force = 2 * self.f_each # maximum thrust of each motor, [N]
+        self.min_force = 1.0 # minimum thrust of each motor, [N]
+        self.max_force = 1.8 * self.f_each # maximum thrust of each motor, [N]
         self.f1 = self.f_each # thrust of each 1st motor, [N]
         self.f2 = self.f_each # thrust of each 2nd motor, [N]
         self.f3 = self.f_each # thrust of each 3rd motor, [N]
@@ -54,9 +54,9 @@ class QuadEnv(gym.Env):
         self.b1d    = np.array([1.0, 0.0, 0.0]) # desired heading direction        
 
         # limits of states:
-        self.x_max_threshold = 3.0 # [m]
-        self.v_max_threshold = 5.0 # [m/s]
-        self.W_max_threshold = 5.0 # [rad/s]
+        self.x_max_threshold = 5.0 # [m]
+        self.v_max_threshold = 10.0 # [m/s]
+        self.W_max_threshold = 10.0 # [rad/s]
         self.euler_max_threshold = 90 # [deg]
 
         self.limits_x = self.x_max_threshold * np.ones(3) # [m]
