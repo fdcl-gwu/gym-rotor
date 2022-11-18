@@ -18,14 +18,14 @@ class CtrlWrapper(QuadEnv):
         self.state[6:15] = np.eye(3).reshape(1, 9, order='F')
 
         # x, position:
-        init_x = self.x_max_threshold - 0.5 # minus 0.5m
+        init_x = self.x_max_threshold - 1.0 # minus 1.0m
         self.state[0] = np.random.uniform(size=1, low=-init_x, high=init_x) 
         self.state[1] = np.random.uniform(size=1, low=-init_x, high=init_x) 
         self.state[2] = np.random.uniform(size=1, low=-init_x, high=init_x)
         x = np.array([self.state[0], self.state[1], self.state[2]]) # [m]
 
         # v, velocity:
-        init_v_error = 0.3 # initial vel error, [m/s]
+        init_v_error = 1.0 # initial vel error, [m/s]
         self.state[3] = np.random.uniform(size=1, low=-init_v_error, high=init_v_error) 
         self.state[4] = np.random.uniform(size=1, low=-init_v_error, high=init_v_error) 
         self.state[5] = np.random.uniform(size=1, low=-init_v_error, high=init_v_error)
@@ -59,7 +59,7 @@ class CtrlWrapper(QuadEnv):
             R_vec = R.reshape(9, 1, order='F').flatten()
 
         # W, angular velocity:
-        init_W_error = 0.3 # initial ang vel error, [rad/s]
+        init_W_error = 2*pi # initial ang vel error, [rad/s]
         self.state[15] = np.random.uniform(size=1, low=-init_W_error, high=init_W_error) 
         self.state[16] = np.random.uniform(size=1, low=-init_W_error, high=init_W_error) 
         self.state[17] = np.random.uniform(size=1, low=-init_W_error, high=init_W_error) 
@@ -187,8 +187,8 @@ class CtrlWrapper(QuadEnv):
         done = False
         done = bool(
                (abs(x) >= 1.0).any() # [m]
-            # or (abs(v) >= 1.0).any() # [m/s]
-            # or (abs(W) >= 1.0).any() # [rad/s]
+            or (abs(v) >= 1.0).any() # [m/s]
+            or (abs(W) >= 1.0).any() # [rad/s]
             or abs(eulerAngles[0]) >= self.euler_max_threshold # phi
             or abs(eulerAngles[1]) >= self.euler_max_threshold # theta
         )

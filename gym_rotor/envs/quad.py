@@ -54,9 +54,9 @@ class QuadEnv(gym.Env):
         self.b1d    = np.array([1.0, 0.0, 0.0]) # desired heading direction        
 
         # limits of states:
-        self.x_max_threshold = 5.0 # [m]
-        self.v_max_threshold = 10.0 # [m/s]
-        self.W_max_threshold = 10.0 # [rad/s]
+        self.x_max_threshold = 10.0 # [m]
+        self.v_max_threshold = 15.0 # [m/s]
+        self.W_max_threshold = 35.0 # [rad/s]
         self.euler_max_threshold = 90 # [deg]
 
         self.limits_x = self.x_max_threshold * np.ones(3) # [m]
