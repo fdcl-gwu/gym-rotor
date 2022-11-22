@@ -25,8 +25,11 @@ class Actor(nn.Module):
     def forward(self, state):
         action = F.relu(self.fc1(state))
         action = F.relu(self.fc2(action))
+        '''
         # Linear scale, [-1, 1] -> [min_act, max_act] 
         return self.scale_act * torch.tanh(self.fc3(action)) + self.avrg_act
+        '''
+        return torch.tanh(self.fc3(action))
 
 
 class Critic(nn.Module):
