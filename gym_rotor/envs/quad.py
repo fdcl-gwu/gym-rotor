@@ -1,30 +1,34 @@
 import gym
 from gym import spaces
 from gym.utils import seeding
+from gym_rotor.envs.quad_utils import *
 
 import numpy as np
 from numpy import linalg
 from numpy.linalg import inv
+from numpy.random import uniform 
 from math import cos, sin, atan2, sqrt, pi
+from scipy.integrate import odeint, solve_ivp
+from transforms3d.euler import euler2mat, mat2euler
 
 class QuadEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
     def __init__(self): 
-
         # Quadrotor parameters:
         self.m = 1.85 # mass of quad, [kg]
         self.d = 0.23 # arm length, [m]
         self.J = np.diag([0.02, 0.02, 0.04]) # inertia matrix of quad, [kg m2]
-        self.c_tf = 0.0135 # torques and thrusts coefficients
+        self.c_tf = 0.0135 # torque-to-thrust coefficients
+        self.c_tw = 1.8 # thrust-to-weight coefficients
         self.g = 9.81  # standard gravity
 
         # Force and Moment:
         self.f = self.m * self.g # magnitude of total thrust to overcome  
                                  # gravity and mass (No air resistance), [N]
         self.f_each = self.m * self.g / 4.0 # thrust magnitude of each motor, [N]
-        self.min_force = 1.0 # minimum thrust of each motor, [N]
-        self.max_force = 1.8 * self.f_each # maximum thrust of each motor, [N]
+        self.min_force = 0.5 # minimum thrust of each motor, [N]
+        self.max_force = self.c_tw * self.f_each # maximum thrust of each motor, [N]
         self.f1 = self.f_each # thrust of each 1st motor, [N]
         self.f2 = self.f_each # thrust of each 2nd motor, [N]
         self.f3 = self.f_each # thrust of each 3rd motor, [N]
@@ -39,6 +43,8 @@ class QuadEnv(gym.Env):
             [-self.c_tf, self.c_tf, -self.c_tf, self.c_tf]
         ]) # Conversion matrix of forces to force-moment 
         self.fM_to_forces = np.linalg.inv(self.forces_to_fM)
+        self.avrg_act = (self.min_force+self.max_force)/2.0 
+        self.scale_act = self.max_force-self.avrg_act # actor scaling
 
         # Simulation parameters:
         self.freq = 200 # frequency [Hz]
@@ -48,41 +54,44 @@ class QuadEnv(gym.Env):
         self.D2R = pi/180 # [deg] to [rad]
         self.e3 = np.array([0.0, 0.0, 1.0])
 
+        # Coefficients in reward function:
+        self.C_X = 0.35 # 2.0  # pos coef.
+        self.C_V = 0.15 # 0.15 # vel coef.
+        self.C_W = 0.25 # 0.2  # ang_vel coef.
+        self.C_Ad = 0.08 # for smooth control
+        self.C_Am = 0.005 # for smooth control
+
         # Commands:
         self.xd     = np.array([0.0, 0.0, 0.0]) # desired tracking position command, [m] 
         self.xd_dot = np.array([0.0, 0.0, 0.0]) # [m/s]
         self.b1d    = np.array([1.0, 0.0, 0.0]) # desired heading direction        
 
         # limits of states:
-        self.x_max_threshold = 10.0 # [m]
-        self.v_max_threshold = 15.0 # [m/s]
-        self.W_max_threshold = 35.0 # [rad/s]
-        self.euler_max_threshold = 90 # [deg]
-
-        self.limits_x = self.x_max_threshold * np.ones(3) # [m]
-        self.limits_v = self.v_max_threshold * np.ones(3) # [m/s]
-        self.limits_R = np.ones(9) 
-        self.limits_W = self.W_max_threshold * np.ones(3) # [rad/s]
-
-        self.low = np.concatenate([-self.limits_x,  
-                                   -self.limits_v,
-                                   -self.limits_R,
-                                   -self.limits_W])
-        self.high = np.concatenate([self.limits_x,  
-                                    self.limits_v,
-                                    self.limits_R,
-                                    self.limits_W])
+        self.x_lim = 2.0 # [m]
+        self.v_lim = 2.0 # [m/s]
+        self.W_lim = pi # [rad/s]
+        self.euler_lim = 80 # [deg]
+        self.low = np.concatenate([-self.x_lim * np.ones(3),  
+                                   -self.v_lim * np.ones(3),
+                                   -np.ones(9),
+                                   -self.W_lim * np.ones(3)])
+        self.high = np.concatenate([self.x_lim * np.ones(3),  
+                                    self.v_lim * np.ones(3),
+                                    np.ones(9),
+                                    self.W_lim * np.ones(3)])
 
         # Observation space:
         self.observation_space = spaces.Box(
-            self.low, 
-            self.high, 
+            low=self.low, 
+            high=self.high, 
             dtype=np.float64
         )
         # Action space:
         self.action_space = spaces.Box(
-            low=self.min_force, 
-            high=self.max_force, 
+            low=-1.0, 
+            high=1.0, 
+            # low=self.min_force, 
+            # high=self.max_force, 
             shape=(4,),
             dtype=np.float64
         ) 
@@ -90,36 +99,17 @@ class QuadEnv(gym.Env):
         # Init:
         self.state = None
         self.viewer = None
-        self.render_quad1  = None
-        self.render_quad2  = None
-        self.render_rotor1 = None
-        self.render_rotor2 = None
-        self.render_rotor3 = None
-        self.render_rotor4 = None
-        self.render_ref = None
-        self.render_force_rotor1 = None
-        self.render_force_rotor2 = None
-        self.render_force_rotor3 = None
-        self.render_force_rotor4 = None
         self.render_index = 1 
-
         self.seed()
-        self.reset()
 
 
-    def step(self, action, prev_action):
+    def step(self, action_step):
+        # De-concatenate `action_step`:
+        action = action_step[0:4]
+        prev_action = action_step[4:8]
 
-        # Saturated actions:
-        action = self.action_wrapper(action) # [N]
-        self.f1 = action[0]
-        self.f2 = action[1]
-        self.f3 = action[2]
-        self.f4 = action[3]
-
-        # Convert each forces to force-moment:
-        self.fM = self.forces_to_fM @ action
-        self.f = self.fM[0]   # [N]
-        self.M = self.fM[1:4] # [Nm]        
+        # Action:
+        action = self.action_wrapper(action) # [N] 
 
         # States: (x[0:3]; v[3:6]; R_vec[6:15]; W[15:18])
         state = (self.state).flatten()
@@ -136,25 +126,287 @@ class QuadEnv(gym.Env):
         return obs, reward, done, {}
 
 
-    def reset(self):
-        raise NotImplementedError
+    def reset(self, env_type='train'):
+        # Reset states & Normalization:
+        self.state = np.array(np.zeros(18))
+        self.state[6:15] = np.eye(3).reshape(1, 9, order='F')
+
+        # Initial state error:
+        self.sample_init_error(env_type)
+
+        # x, position:
+        self.state[0] = uniform(size=1, low=-self.init_x_error, high=self.init_x_error) 
+        self.state[1] = uniform(size=1, low=-self.init_x_error, high=self.init_x_error) 
+        self.state[2] = uniform(size=1, low=-self.init_x_error, high=self.init_x_error)
+
+        # v, velocity:
+        self.state[3] = uniform(size=1, low=-self.init_v_error, high=self.init_v_error) 
+        self.state[4] = uniform(size=1, low=-self.init_v_error, high=self.init_v_error) 
+        self.state[5] = uniform(size=1, low=-self.init_v_error, high=self.init_v_error)
+
+        # W, angular velocity:
+        self.state[15] = uniform(size=1, low=-self.init_W_error, high=self.init_W_error) 
+        self.state[16] = uniform(size=1, low=-self.init_W_error, high=self.init_W_error) 
+        self.state[17] = uniform(size=1, low=-self.init_W_error, high=self.init_W_error) 
+
+        # R, attitude:
+        pitch = uniform(size=1, low=-self.init_R_error, high=self.init_R_error)
+        roll  = uniform(size=1, low=-self.init_R_error, high=self.init_R_error)
+        yaw   = uniform(size=1, low=-pi, high=pi) 
+        R = euler2mat(roll, pitch, yaw) 
+        """
+        # NED; https://www.wilselby.com/research/arducopter/modeling/
+        self.state[6]  = cos(theta)*cos(psi)
+        self.state[7]  = cos(theta)*sin(psi) 
+        self.state[8]  = -sin(theta) 
+        self.state[9]  = sin(phi)*sin(theta)*cos(psi) - cos(phi)*sin(psi)
+        self.state[10] = sin(phi)*sin(theta)*sin(psi) + cos(phi)*cos(psi)
+        self.state[11] = sin(phi)*cos(theta)
+        self.state[12] = cos(phi)*sin(theta)*cos(psi) + sin(phi)*sin(psi)
+        self.state[13] = cos(phi)*sin(theta)*sin(psi) - sin(phi)*cos(psi)
+        self.state[14] = cos(phi)*cos(theta)
+        R_vec = np.array([self.state[6],  self.state[7],  self.state[8],
+                          self.state[9],  self.state[10], self.state[11],
+                          self.state[12], self.state[13], self.state[14]])
+        R = R_vec.reshape(3, 3, order='F')
+        #R = rand_uniform_rot3d()
+        """
+        # Re-orthonormalize:
+        if not isRotationMatrix(R):
+            ''' https://www.codefull.net/2017/07/orthonormalize-a-rotation-matrix/ '''
+            u, s, vh = linalg.svd(R, full_matrices=False)
+            R = u @ vh
+        R_vec = R.reshape(9, 1, order='F').flatten()
+
+        # Normalization
+        x_norm = np.array([self.state[0], self.state[1], self.state[2]]) / self.x_lim # [m]
+        v_norm = np.array([self.state[3], self.state[4], self.state[5]]) / self.v_lim # [m/s]
+        W_norm = np.array([self.state[15], self.state[16], self.state[17]]) / self.W_lim # [rad/s]
+        self.state = np.concatenate((x_norm, v_norm, R_vec, W_norm), axis=0)
+
+        # Reset forces & moments:
+        self.f  = self.m * self.g
+        self.f1 = self.f_each
+        self.f2 = self.f_each
+        self.f3 = self.f_each
+        self.f4 = self.f_each
+        self.M  = np.zeros(3)
+
+        return np.array(self.state)
 
 
     def action_wrapper(self, action):
-        raise NotImplementedError
+        # Linear scale, [-1, 1] -> [min_act, max_act] 
+        action = (
+            self.scale_act * action + self.avrg_act
+            ).clip(self.min_force, self.max_force)
+
+        # Saturated thrust of each motor:
+        self.f1 = action[0]
+        self.f2 = action[1]
+        self.f3 = action[2]
+        self.f4 = action[3]
+
+        # Convert each forces to force-moment:
+        self.fM = self.forces_to_fM @ action
+        self.f = self.fM[0]   # [N]
+        self.M = self.fM[1:4] # [Nm]  
+
+        return action
 
 
     def observation_wrapper(self, state):
-        raise NotImplementedError
+        x = np.array([state[0], state[1], state[2]]) # [m]
+        v = np.array([state[3], state[4], state[5]]) # [m/s]
+        R_vec = np.array([state[6],  state[7],  state[8],
+                          state[9],  state[10], state[11],
+                          state[12], state[13], state[14]])
+        W = np.array([state[15], state[16], state[17]]) # [rad/s]
+
+        # Re-orthonormalize:
+        R = R_vec.reshape(3, 3, order='F')
+        if not isRotationMatrix(R):
+            ''' https://www.codefull.net/2017/07/orthonormalize-a-rotation-matrix/ '''
+            u, s, vh = linalg.svd(R, full_matrices=False)
+            R = u @ vh
+            R_vec = R.reshape(9, 1, order='F').flatten()
+
+        # De-normalization:
+        x *= self.x_lim # [m]
+        v *= self.v_lim # [m/s]
+        W *= self.W_lim # [rad/s]
+        state = np.concatenate((x, v, R_vec, W), axis=0)
+
+        # Solve ODEs:
+        if self.ode_integrator == "euler": # solve w/ Euler's Method
+            # Equations of motion of the quadrotor UAV
+            x_dot = v
+            v_dot = self.g*self.e3 - self.f*R@self.e3/self.m
+            R_vec_dot = (R@hat(W)).reshape(9, 1, order='F')
+            W_dot = inv(self.J)@(-hat(W)@self.J@W + self.M)
+            state_dot = np.concatenate([x_dot.flatten(), 
+                                        v_dot.flatten(),                                                                          
+                                        R_vec_dot.flatten(),
+                                        W_dot.flatten()])
+            self.state = state + state_dot * self.dt
+        elif self.ode_integrator == "solve_ivp": # solve w/ 'solve_ivp' Solver
+            # method = 'RK45', 'DOP853', 'BDF', 'LSODA', ...
+            sol = solve_ivp(self.EoM, [0, self.dt], state, method='DOP853')
+            self.state = sol.y[:,-1]
+
+        # Normalization:
+        x = np.array([self.state[0], self.state[1], self.state[2]]) / self.x_lim
+        v = np.array([self.state[3], self.state[4], self.state[5]]) / self.v_lim
+        R_vec = np.array([self.state[6],  self.state[7],  self.state[8],
+                          self.state[9],  self.state[10], self.state[11],
+                          self.state[12], self.state[13], self.state[14]])
+        W = np.array([self.state[15], self.state[16], self.state[17]]) / self.W_lim
+        self.state = np.concatenate((x, v, R_vec, W), axis=0)
+
+        obs = self.state
+
+        return obs
     
 
     def reward_wrapper(self, obs, action, prev_action):
-        raise NotImplementedError
+        x = np.array([obs[0], obs[1], obs[2]]) # [m]
+        v = np.array([obs[3], obs[4], obs[5]]) # [m/s]
+        R_vec = np.array([obs[6],  obs[7],  obs[8],
+                          obs[9],  obs[10], obs[11],
+                          obs[12], obs[13], obs[14]])
+        R = R_vec.reshape(3, 3, order='F')
+        W = np.array([obs[15], obs[16], obs[17]]) # [rad/s]
+
+        eX = x - self.xd     # position error
+        eV = v - self.xd_dot # velocity error
+
+        # New reward
+        prev_action = (
+            self.scale_act * prev_action + self.avrg_act
+            ).clip(self.min_force, self.max_force)
+
+        # Reward function
+        C_X = self.C_X # pos coef.
+        C_V = self.C_V # vel coef.
+        C_W = self.C_W # ang_vel coef.
+        C_Ad = self.C_Ad # for smooth control
+        C_Am = self.C_Am # for smooth control
+
+        '''
+        reward = C_X*max(0, 1.0 - linalg.norm(eX, 2)) \
+               - C_V * linalg.norm(eV, 2) \
+               - C_W * linalg.norm(W, 2) \
+               - C_Ad * (abs(prev_action - action)).sum() \
+               - C_Am * (abs(action)).sum()
+        reward = np.interp(reward, [-C_X, C_X], [0.0, 1.0]) # normalized into [0,1]
+        '''
+
+        reward = C_X*max(0, -(np.log(abs(eX)[0])+np.log(abs(eX)[1])+np.log(abs(eX)[2]))) \
+               - C_V * linalg.norm(eV, 2) \
+               - C_W * linalg.norm(W, 2) \
+               - C_Ad * (abs(prev_action - action)).sum() \
+               - C_Am * (abs(action)).sum() \
+               #+ C_W*max(0, -(np.log(abs(W)[0])+np.log(abs(W)[1])+np.log(abs(W)[2]))) \
+
+        reward *= 0.1 # rescaled by a factor of 0.1
+
+        return reward
 
 
     def done_wrapper(self, obs):
-        raise NotImplementedError
+        x = np.array([obs[0], obs[1], obs[2]]) # [m]
+        v = np.array([obs[3], obs[4], obs[5]]) # [m/s]
+        R_vec = np.array([obs[6],  obs[7],  obs[8],
+                          obs[9],  obs[10], obs[11],
+                          obs[12], obs[13], obs[14]])
+        R = R_vec.reshape(3, 3, order='F')
+        W = np.array([obs[15], obs[16], obs[17]]) # [rad/s]
 
+        # Convert rotation matrix to Euler angles:
+        if not isRotationMatrix(R): # Re-orthonormalize:
+            ''' https://www.codefull.net/2017/07/orthonormalize-a-rotation-matrix/ '''
+            u, s, vh = linalg.svd(R, full_matrices=False)
+            R = u @ vh
+            R_vec = R.reshape(9, 1, order='F').flatten()
+        eulerAngles = rotationMatrixToEulerAngles(R) * self.R2D
+        
+        done = False
+        done = bool(
+               (abs(x) >= 1.0).any() # [m]
+            or (abs(v) >= 1.0).any() # [m/s]
+            or (abs(W) >= 1.0).any() # [rad/s]
+            or abs(eulerAngles[0]) >= self.euler_lim # phi
+            or abs(eulerAngles[1]) >= self.euler_lim # theta
+        )
+
+        return done
+
+
+    def EoM(self, t, state):
+        # https://youtu.be/iS5JFuopQsA
+        x = np.array([state[0], state[1], state[2]]) # [m]
+        v = np.array([state[3], state[4], state[5]]) # [m/s]
+        R_vec = np.array([state[6], state[7], state[8],
+                          state[9], state[10], state[11],
+                          state[12], state[13], state[14]])
+        R = R_vec.reshape(3, 3, order='F')
+        W = np.array([state[15], state[16], state[17]]) # [rad/s]
+
+        # Equations of motion of the quadrotor UAV
+        x_dot = v
+        v_dot = self.g*self.e3 - self.f*R@self.e3/self.m
+        R_vec_dot = (R@hat(W)).reshape(1, 9, order='F')
+        W_dot = inv(self.J)@(-hat(W)@self.J@W + self.M)
+        state_dot = np.concatenate([x_dot.flatten(), 
+                                    v_dot.flatten(),                                                                          
+                                    R_vec_dot.flatten(),
+                                    W_dot.flatten()])
+
+        return np.array(state_dot)
+
+
+    def sample_init_error(self, env_type='train'):
+        if env_type == 'train':
+            self.init_x_error = self.x_lim - 0.1 # minus 0.1m
+            self.init_v_error = self.v_lim*0.5 # initial vel error, [m/s]
+            self.init_R_error = 10 * self.D2R # 10 deg
+            self.init_W_error = self.W_lim*0.1 # initial ang vel error, [rad/s]
+        elif env_type == 'eval':
+            self.init_x_error = self.x_lim - 0.1 # minus 0.1m
+            self.init_v_error = self.v_lim*0.1 # initial vel error, [m/s]
+            self.init_R_error = 3 * self.D2R # 3 deg
+            self.init_W_error = self.W_lim*0.01 # initial ang vel error, [rad/s]
+
+
+    def set_random_parameters(self):
+        """
+        This function sets the parameters useful for customizing the employed parametric distribution.
+        """
+        """
+        This function indicates which mass has to be randomized 
+        according to self.set_parametrization() and self.sample_parameters()
+        """
+        """
+        Sample parameters according to a domain randomization distribution
+        -----
+        This function samples masses for a Uniform Distribution. 
+        Sampling is done independently for each component of the vector. 
+        -----
+        from torch.distributions.uniform import Uniform
+        """
+
+        # Quadrotor parameters:
+        self.m  = uniform(size=1, low=1.7, high=1.9).max() # 1.85; mass of quad, [kg]
+        self.d  = uniform(size=1, low=0.22, high=0.24).max() # 0.23; arm length, [m]
+        self.J1 = uniform(size=1, low=0.017, high=0.023).max() 
+        self.J2 = uniform(size=1, low=0.017, high=0.023).max() 
+        self.J3 = uniform(size=1, low=0.037, high=0.043).max() 
+        self.J  = np.diag([self.J1, self.J2, self.J3]) # [0.02,0.02,0.04]; inertia matrix of quad, [kg m2]
+        self.c_tf = uniform(size=1, low=0.01, high=0.015).max() # 0.0135; torque-to-thrust coefficients
+        self.c_tw = uniform(size=1, low=1.6, high=2.0).max() # 1.8; thrust-to-weight coefficients
+        
+        # Motor and Sensor noise: thrust_noise_ratio, sigma, cutoff_freq
+        
 
     def render(self, mode='human', close=False):
         from vpython import box, sphere, color, vector, rate, canvas, cylinder, ring, arrow, scene, textures
@@ -395,99 +647,11 @@ class QuadEnv(gym.Env):
         return True
 
 
-    def EoM(self, t, state):
-        # https://youtu.be/iS5JFuopQsA
-        x = np.array([state[0], state[1], state[2]]) # [m]
-        v = np.array([state[3], state[4], state[5]]) # [m/s]
-        R_vec = np.array([state[6], state[7], state[8],
-                          state[9], state[10], state[11],
-                          state[12], state[13], state[14]])
-        R = R_vec.reshape(3, 3, order='F')
-        W = np.array([state[15], state[16], state[17]]) # [rad/s]
-
-        # Equations of motion of the quadrotor UAV
-        x_dot = v
-        v_dot = self.g*self.e3 - self.f*R@self.e3/self.m
-        R_vec_dot = (R@self.hat(W)).reshape(1, 9, order='F')
-        W_dot = inv(self.J)@(-self.hat(W)@self.J@W + self.M)
-        state_dot = np.concatenate([x_dot.flatten(), 
-                                    v_dot.flatten(),                                                                          
-                                    R_vec_dot.flatten(),
-                                    W_dot.flatten()])
-
-        return np.array(state_dot)
-
-
-    def hat(self, x):
-        hat_x = np.array([[0.0, -x[2], x[1]], \
-                          [x[2], 0.0, -x[0]], \
-                          [-x[1], x[0], 0.0]])
-                        
-        return np.array(hat_x)
-
-
-    def vee(self, M):
-        # vee map: inverse of the hat map
-        vee_M = np.array([[M[2,1]], \
-                          [M[0,2]], \
-                          [M[1,0]]])
-
-        return np.array(vee_M)
-
-
-    def eulerAnglesToRotationMatrix(self, theta) :
-        # Calculates Rotation Matrix given euler angles.
-        R_x = np.array([[1,              0,               0],
-                        [0,  cos(theta[0]),  -sin(theta[0])],
-                        [0,  sin(theta[0]),   cos(theta[0])]])
-
-        R_y = np.array([[ cos(theta[1]),   0,  sin(theta[1])],
-                        [             0,   1,              0],
-                        [-sin(theta[1]),   0,  cos(theta[1])]])
-
-        R_z = np.array([[cos(theta[2]),  -sin(theta[2]),  0],
-                        [sin(theta[2]),   cos(theta[2]),  0],
-                        [            0,               0,  1]])
-
-        R = np.dot(R_z, np.dot( R_y, R_x ))
-
-        return R
-
-
-    def isRotationMatrix(self, R):
-        # Checks if a matrix is a valid rotation matrix.
-        Rt = np.transpose(R)
-        shouldBeIdentity = np.dot(Rt, R)
-        I = np.identity(3, dtype = R.dtype)
-        n = np.linalg.norm(I - shouldBeIdentity)
-        return n < 1e-6
-
-
-    def rotationMatrixToEulerAngles(self, R):
-        # Calculates rotation matrix to euler angles.
-        assert(self.isRotationMatrix(R))
-
-        sy = sqrt(R[0,0] * R[0,0] +  R[1,0] * R[1,0])
-
-        singular = sy < 1e-6
-
-        if  not singular:
-            x = atan2(R[2,1] , R[2,2])
-            y = atan2(-R[2,0], sy)
-            z = atan2(R[1,0], R[0,0])
-        else:
-            x = atan2(-R[1,2], R[1,1])
-            y = atan2(-R[2,0], sy)
-            z = 0
-
-        return np.array([x, y, z])
+    def seed(self, seed=None):
+        self.np_random, seed = seeding.np_random(seed)
+        return [seed]
 
 
     def close(self):
         if self.viewer:
             self.viewer = None
-
-
-    def seed(self, seed=None):
-        self.np_random, seed = seeding.np_random(seed)
-        return [seed]

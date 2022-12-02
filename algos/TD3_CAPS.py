@@ -104,8 +104,7 @@ class Critic(nn.Module):
         return q1
 
 
-
-class TD3(object):
+class TD3_CAPS(object):
     def __init__(self, state_dim, action_dim, hidden_dim, \
                        max_act, min_act, avrg_act, scale_act, \
                        discount, lr, tau, target_noise, noise_clip, policy_update_freq):
@@ -186,6 +185,24 @@ class TD3(object):
             # Set actor loss s.t. Q(s,\mu(s)) approximates \max_a Q(s,a):
             actor_loss = -self.critic.Q1(state, self.actor(state)).mean()
             
+            # Regularizing action policies for smooth control
+            lam_T = 0.5
+            if lam_T > 0: # Temporal Smoothness
+                action_T = (self.actor(state)).clamp(self.min_act, self.max_act) 
+                next_action_T = (self.actor(next_state)).clamp(self.min_act, self.max_act) 
+                Loss_T = F.mse_loss(action_T, next_action_T)
+                actor_loss += lam_T * Loss_T
+
+            lam_S = 0.1
+            if lam_S > 0: # Spatial Smoothness
+                action_S = (self.actor(state)).clamp(self.min_act, self.max_act)
+                noise_S = (
+                    torch.normal(mean=0.0, std=0.01, size=(1, 4))
+                    ).clamp(-0.01, 0.01).to(device) # mean and standard deviation
+                action_bar = (action_S + noise_S).clamp(self.min_act, self.max_act)
+                Loss_S = F.mse_loss(action_S, action_bar)
+                actor_loss += lam_S * Loss_S
+
             # Update policy by gradient ascent:
             self.actor_optimizer.zero_grad()
             actor_loss.backward()

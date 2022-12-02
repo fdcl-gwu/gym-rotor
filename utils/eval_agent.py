@@ -4,57 +4,64 @@ from datetime import datetime
 
 import gym
 import gym_rotor
-from gym_rotor.envs.eval_wrapper import EvalWrapperCtrl
-from gym_rotor.envs.eval_wrapper import EvalWrapperEquiv
+from utils.equiv_ctrl import *
 
 # Runs policy for n episodes and returns average reward.
-def eval_agent(policy, wrapper_id, save_log, max_steps, avrg_act, seed):
+def eval_agent(policy, avrg_act, args):
     # Make OpenAI Gym environment:
-    if wrapper_id == "CtrlWrapper":
-        eval_env = EvalWrapperCtrl()
-    elif wrapper_id == "EquivWrapper":
-        eval_env = EvalWrapperEquiv()
+    eval_env = gym.make(args.env_id)
 
     # Fixed seed is used for the eval environment.
-    eval_env.seed(seed)
-    eval_env.action_space.seed(seed)
-    torch.manual_seed(seed)
-    np.random.seed(seed)
+    eval_env.seed(args.seed)
+    eval_env.action_space.seed(args.seed)
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
 
     episode_eval = 5
     avg_reward = 0.0
     for _ in range(episode_eval):
-        state, done = eval_env.reset(), False
+        state, done = eval_env.reset(env_type='eval'), False
         episode_timesteps = 0
         action = avrg_act * np.ones(4) 
 
-        if save_log:
+        if args.save_log:
             action_list = []
             state_list  = []
 
         while not done:
             episode_timesteps += 1
 
-            prev_action = action # keep previous action
-            # Select action according to policy
-            action = policy.select_action(np.array(state))
+            if args.wrapper_id == "EquivWrapper":
+                state_equiv = rot_e3(state)
+
+            # Keep previous action:
+            prev_action = action 
+            # Select action according to policy:
+            if args.wrapper_id == "EquivWrapper":
+                action = policy.select_action(np.array(state_equiv))
+            else:
+                action = policy.select_action(np.array(state))
+            # Concatenate `action` and `prev_action:
+            action_step = np.concatenate((action, prev_action), axis=None)
 
             # Perform action
-            state, reward, done, _ = eval_env.step(action, prev_action)
+            state, reward, done, _ = eval_env.step(action_step)
+
+            # eval_env.render() # 3D visualization:
             
-            # Cumulative rewards
+            # Cumulative rewards:
             avg_reward += reward
 
             # Save data:
-            if save_log:
+            if args.save_log:
                 action_list.append(np.concatenate((action), axis=None))
                 state_list.append(state)
 
-            if episode_timesteps == max_steps:
+            if episode_timesteps == args.max_steps:
                 done = True
 
         # Save data
-        if save_log:
+        if args.save_log:
             min_len = min(len(action_list), len(state_list))
             log_data = np.column_stack((action_list[-min_len:], state_list[-min_len:]))
             header = "Actions and States\n"
