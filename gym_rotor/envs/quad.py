@@ -55,10 +55,10 @@ class QuadEnv(gym.Env):
         self.e3 = np.array([0.0, 0.0, 1.0])
 
         # Coefficients in reward function:
-        self.C_X = 0.35 # 2.0  # pos coef.
+        self.C_X = 2.0 # 0.35 # pos coef.
         self.C_V = 0.15 # 0.15 # vel coef.
-        self.C_W = 0.25 # 0.2  # ang_vel coef.
-        self.C_Ad = 0.08 # for smooth control
+        self.C_W = 0.2 # 0.25 # ang_vel coef.
+        self.C_Ad = 0.03 # for smooth control
         self.C_Am = 0.005 # for smooth control
 
         # Commands:
@@ -68,9 +68,9 @@ class QuadEnv(gym.Env):
 
         # limits of states:
         self.x_lim = 2.0 # [m]
-        self.v_lim = 2.0 # [m/s]
-        self.W_lim = pi # [rad/s]
-        self.euler_lim = 80 # [deg]
+        self.v_lim = 4.0 # [m/s]
+        self.W_lim = 2*pi # [rad/s]
+        self.euler_lim = 90 # [deg]
         self.low = np.concatenate([-self.x_lim * np.ones(3),  
                                    -self.v_lim * np.ones(3),
                                    -np.ones(9),
@@ -292,21 +292,21 @@ class QuadEnv(gym.Env):
         C_Ad = self.C_Ad # for smooth control
         C_Am = self.C_Am # for smooth control
 
-        '''
         reward = C_X*max(0, 1.0 - linalg.norm(eX, 2)) \
                - C_V * linalg.norm(eV, 2) \
                - C_W * linalg.norm(W, 2) \
                - C_Ad * (abs(prev_action - action)).sum() \
                - C_Am * (abs(action)).sum()
         reward = np.interp(reward, [-C_X, C_X], [0.0, 1.0]) # normalized into [0,1]
-        '''
 
+        '''
         reward = C_X*max(0, -(np.log(abs(eX)[0])+np.log(abs(eX)[1])+np.log(abs(eX)[2]))) \
                - C_V * linalg.norm(eV, 2) \
                - C_W * linalg.norm(W, 2) \
                - C_Ad * (abs(prev_action - action)).sum() \
                - C_Am * (abs(action)).sum() \
                #+ C_W*max(0, -(np.log(abs(W)[0])+np.log(abs(W)[1])+np.log(abs(W)[2]))) \
+        '''
 
         reward *= 0.1 # rescaled by a factor of 0.1
 
@@ -368,33 +368,17 @@ class QuadEnv(gym.Env):
     def sample_init_error(self, env_type='train'):
         if env_type == 'train':
             self.init_x_error = self.x_lim - 0.1 # minus 0.1m
-            self.init_v_error = self.v_lim*0.5 # initial vel error, [m/s]
+            self.init_v_error = self.v_lim*0.2 # 20%; initial vel error, [m/s]
             self.init_R_error = 10 * self.D2R # 10 deg
             self.init_W_error = self.W_lim*0.1 # initial ang vel error, [rad/s]
         elif env_type == 'eval':
             self.init_x_error = self.x_lim - 0.1 # minus 0.1m
             self.init_v_error = self.v_lim*0.1 # initial vel error, [m/s]
             self.init_R_error = 3 * self.D2R # 3 deg
-            self.init_W_error = self.W_lim*0.01 # initial ang vel error, [rad/s]
+            self.init_W_error = self.W_lim*0.01 # 1%; initial ang vel error, [rad/s]
 
 
     def set_random_parameters(self):
-        """
-        This function sets the parameters useful for customizing the employed parametric distribution.
-        """
-        """
-        This function indicates which mass has to be randomized 
-        according to self.set_parametrization() and self.sample_parameters()
-        """
-        """
-        Sample parameters according to a domain randomization distribution
-        -----
-        This function samples masses for a Uniform Distribution. 
-        Sampling is done independently for each component of the vector. 
-        -----
-        from torch.distributions.uniform import Uniform
-        """
-
         # Quadrotor parameters:
         self.m  = uniform(size=1, low=1.7, high=1.9).max() # 1.85; mass of quad, [kg]
         self.d  = uniform(size=1, low=0.22, high=0.24).max() # 0.23; arm length, [m]

@@ -28,7 +28,7 @@ if __name__ == "__main__":
                     help='Load trained models and save log(default: False)')      
     parser.add_argument("--eval_freq", default=1e4, type=int,
                     help='How often (time steps) evaluate our trained model')       
-    parser.add_argument('--seed', default=1234, type=int, metavar='N',
+    parser.add_argument('--seed', default=123, type=int, metavar='N',
                     help='Random seed of Gym, PyTorch and Numpy (default: 123)')      
     # Args of Environment:
     parser.add_argument('--env_id', default="Quad-v0",
@@ -44,11 +44,11 @@ if __name__ == "__main__":
     # Args of Agents:
     parser.add_argument("--policy", default="TD3",
                     help='Which algorithms? DDPG or TD3 or TD3_CAPS(default: TD3)')
-    parser.add_argument("--hidden_dim", default=128, type=int, 
+    parser.add_argument("--hidden_dim", default=256, type=int, 
                     help='Number of nodes in hidden layers (default: 256)')
     parser.add_argument('--discount', default=0.99, type=float, metavar='G',
                         help='discount factor, gamma (default: 0.99)')
-    parser.add_argument('--lr', default=3e-4, type=float, metavar='G',
+    parser.add_argument('--lr', default=1e-5, type=float, metavar='G',
                         help='learning rate, alpha (default: 1e-5)')
     parser.add_argument("--start_timesteps", default=int(25e3), type=int, 
                     help='Number of steps for uniform-random action selection (default: 25e3)')
@@ -56,11 +56,11 @@ if __name__ == "__main__":
     parser.add_argument('--tau', default=0.005, type=float, metavar='G',
                     help='Target network update rate (default: 0.005)')
     # TD3:
-    parser.add_argument("--act_noise", default=0.05, type=float,
+    parser.add_argument("--act_noise", default=0.1, type=float,
                     help='Stddev for Gaussian exploration noise (default: 0.1)')
-    parser.add_argument("--target_noise", default=0.1, type=float,
+    parser.add_argument("--target_noise", default=0.2, type=float,
                     help='Stddev for smoothing noise added to target policy (default: 0.2)')
-    parser.add_argument("--noise_clip", default=0.3, type=float,
+    parser.add_argument("--noise_clip", default=0.5, type=float,
                     help='Clipping range of target policy smoothing noise (default: 0.5)')
     parser.add_argument('--policy_update_freq', default=2, type=int, metavar='N',
                         help='Frequency of “Delayed” policy updates (default: 2)')
