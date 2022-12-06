@@ -14,7 +14,7 @@ import algos.TD3 as TD3
 import algos.TD3_CAPS as TD3_CAPS
 import utils.replay_buffer as replay
 from utils.eval_agent import eval_agent
-from utils.equiv_ctrl import *
+from utils.ctrl_utils import *
 
 if __name__ == "__main__":
 	
@@ -28,29 +28,29 @@ if __name__ == "__main__":
                     help='Load trained models and save log(default: False)')      
     parser.add_argument("--eval_freq", default=1e4, type=int,
                     help='How often (time steps) evaluate our trained model')       
-    parser.add_argument('--seed', default=123, type=int, metavar='N',
+    parser.add_argument('--seed', default=1234, type=int, metavar='N',
                     help='Random seed of Gym, PyTorch and Numpy (default: 123)')      
     # Args of Environment:
     parser.add_argument('--env_id', default="Quad-v0",
                     help='Name of OpenAI Gym environment (default: Quad-v0)')
     parser.add_argument('--wrapper_id', default="",
                     help='Name of wrapper: Sim2RealWrapper, EquivWrapper')    
-    parser.add_argument('--max_steps', default=2000, type=int,
+    parser.add_argument('--max_steps', default=1800, type=int,
                     help='Maximum number of steps in each episode (default: 3000)')
     parser.add_argument('--max_timesteps', default=int(1e8), type=int,
                     help='Number of total timesteps (default: 1e8)')
     parser.add_argument('--render', default=False, type=bool,
                     help='Simulation visualization (default: False)')
     # Args of Agents:
-    parser.add_argument("--policy", default="TD3",
+    parser.add_argument("--policy", default="TD3_CAPS",
                     help='Which algorithms? DDPG or TD3 or TD3_CAPS(default: TD3)')
-    parser.add_argument("--hidden_dim", default=256, type=int, 
+    parser.add_argument("--hidden_dim", default=128, type=int, 
                     help='Number of nodes in hidden layers (default: 256)')
     parser.add_argument('--discount', default=0.99, type=float, metavar='G',
                         help='discount factor, gamma (default: 0.99)')
-    parser.add_argument('--lr', default=1e-5, type=float, metavar='G',
+    parser.add_argument('--lr', default=6e-4, type=float, metavar='G',
                         help='learning rate, alpha (default: 1e-5)')
-    parser.add_argument("--start_timesteps", default=int(25e3), type=int, 
+    parser.add_argument("--start_timesteps", default=int(1e4), type=int, 
                     help='Number of steps for uniform-random action selection (default: 25e3)')
     # DDPG:
     parser.add_argument('--tau', default=0.005, type=float, metavar='G',
@@ -126,7 +126,7 @@ if __name__ == "__main__":
     # Load trained models and optimizer parameters:
     file_name = f"{args.policy}_{args.env_id}"
     if args.load_model == True:
-        policy.load(f"./models/{file_name + '_best'}")
+        policy.load(f"./models/{file_name + '_best'}") # '_solved' or '_best'
 
     # Evaluate policy
     eval_policy = [eval_agent(policy, avrg_act, args)]
@@ -176,6 +176,9 @@ if __name__ == "__main__":
             action = (
                 action + np.random.normal(0, avrg_act * args.act_noise, size=action_dim)
             ).clip(min_act, max_act)
+        # Control input saturation:
+        eX = np.round(state[0:3]*env.x_lim, 5) # position error [m]
+        action = ctrl_sat(action, eX, min_act, max_act, env)
         # Concatenate `action` and `prev_action:
         action_step = np.concatenate((action, prev_action), axis=None)
 
@@ -192,10 +195,11 @@ if __name__ == "__main__":
             env.render()
 
         # Episode termination:
+        if (abs(eX) <= 0.005).all(): # problem is solved!
+            done = True
+            policy.save(f"./models/{file_name+ '_solved'}") # save solved model
         if episode_timesteps == args.max_steps:
             done = True
-            if args.save_model: 
-                policy.save(f"./models/{file_name}")
         done_bool = float(done) if episode_timesteps < args.max_steps else 0
 
         # Store a set of transitions in replay buffer
@@ -212,7 +216,7 @@ if __name__ == "__main__":
         episode_reward += reward
 
         if done: 
-            print(f"Total-timestpes: {total_timesteps+1}, #Episode: {i_episode+1}, timestpes: {episode_timesteps}, Reward: {episode_reward:.3f}, eX: {state[0:3]}")
+            print(f"Total-timestpes: {total_timesteps+1}, #Episode: {i_episode+1}, timestpes: {episode_timesteps}, Reward: {episode_reward:.3f}, eX: {eX}")
                         
             # Save best model:
             if episode_reward > max_total_reward:

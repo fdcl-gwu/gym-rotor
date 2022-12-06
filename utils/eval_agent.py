@@ -4,7 +4,7 @@ from datetime import datetime
 
 import gym
 import gym_rotor
-from utils.equiv_ctrl import *
+from utils.ctrl_utils import *
 
 # Runs policy for n episodes and returns average reward.
 def eval_agent(policy, avrg_act, args):
@@ -41,6 +41,9 @@ def eval_agent(policy, avrg_act, args):
                 action = policy.select_action(np.array(state_equiv))
             else:
                 action = policy.select_action(np.array(state))
+            # Control input saturation:
+            eX = np.round(state[0:3]*eval_env.x_lim, 5) # position error [m]
+            action = ctrl_sat(action, eX, -1., +1., eval_env)
             # Concatenate `action` and `prev_action:
             action_step = np.concatenate((action, prev_action), axis=None)
 
@@ -72,7 +75,7 @@ def eval_agent(policy, avrg_act, args):
     avg_reward /= episode_eval
 
     print("---------------------------------------")
-    print(f"Evaluation over {episode_eval}, average reward: {avg_reward:.3f}") 
+    print(f"Evaluation over {episode_eval}, average reward: {avg_reward:.3f}, eX: {eX}")
     print("---------------------------------------")
 
     return avg_reward

@@ -1,14 +1,39 @@
-# Equivariant Reinforcement Learning for Quadrotor UAV
 import numpy as np
+from numpy import linalg
 from math import cos, sin, pi
+
+def ctrl_sat(action, eX, min_act, max_act, env):
+
+    # Normalized hovering thrust:
+    hover_force = np.interp(env.f_each, [env.min_force, env.max_force], [-1., 1.]) # normalized into [-1, 1]
+
+    # Normalized position error:
+    eX = linalg.norm(eX, 2)/env.x_lim # normalized into [-1, 1]
+
+    # Slopes:
+    c1 = max_act - hover_force
+    c2 = -(hover_force - min_act)
+    '''
+    c3 = -c1
+    c4 = -c2
+
+    # Saturation:
+    if eX >= 0:
+        action = np.clip(action, c2*eX + hover_force, c1*eX + hover_force)
+    else:
+        action = np.clip(action, c4*eX + hover_force, c3*eX + hover_force)
+    '''
+    # Saturation:
+    action = np.clip(action, c2*eX + hover_force, c1*eX + hover_force)
+    return action
 
 # Rotation on e3 axis
 def R_e3(theta):
-  return np.array([[cos(theta), -sin(theta), 0.0],
-                   [sin(theta),  cos(theta), 0.0],
-                   [       0.0,         0.0, 1.0]])
+    return np.array([[cos(theta), -sin(theta), 0.0],
+                     [sin(theta),  cos(theta), 0.0],
+                     [       0.0,         0.0, 1.0]])
 
-
+# Equivariant Reinforcement Learning for Quadrotor UAV
 def rot_e3(state):
     # Actual quadrotor states
     x = np.array([state[0], state[1], state[2]])
