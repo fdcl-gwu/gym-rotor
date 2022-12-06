@@ -55,11 +55,12 @@ class QuadEnv(gym.Env):
         self.e3 = np.array([0.0, 0.0, 1.0])
 
         # Coefficients in reward function:
-        self.C_X = 2.0 # 0.35 # pos coef.
-        self.C_V = 0.15 # 0.15 # vel coef.
-        self.C_W = 0.2 # 0.25 # ang_vel coef.
-        self.C_Ad = 0.03 # for smooth control
-        self.C_Am = 0.005 # for smooth control
+        self.C_X = 0.35 # pos coef.
+        self.C_V = 0.15 # vel coef.
+        self.C_W = 0.25 # ang_vel coef.
+        self.C_R = 0.1 # att coef.
+        self.C_Ad = 0.0 # for smooth control
+        self.C_Am = 0.005 # 0.03 for smooth control
 
         # Commands:
         self.xd     = np.array([0.0, 0.0, 0.0]) # desired tracking position command, [m] 
@@ -70,7 +71,7 @@ class QuadEnv(gym.Env):
         self.x_lim = 2.0 # [m]
         self.v_lim = 4.0 # [m/s]
         self.W_lim = 2*pi # [rad/s]
-        self.euler_lim = 90 # [deg]
+        self.euler_lim = 80 # [deg]
         self.low = np.concatenate([-self.x_lim * np.ones(3),  
                                    -self.v_lim * np.ones(3),
                                    -np.ones(9),
@@ -177,6 +178,7 @@ class QuadEnv(gym.Env):
             u, s, vh = linalg.svd(R, full_matrices=False)
             R = u @ vh
         R_vec = R.reshape(9, 1, order='F').flatten()
+        self.b1d = get_current_b1(R) # desired heading direction        
 
         # Normalization
         x_norm = np.array([self.state[0], self.state[1], self.state[2]]) / self.x_lim # [m]
@@ -261,11 +263,18 @@ class QuadEnv(gym.Env):
                           self.state[9],  self.state[10], self.state[11],
                           self.state[12], self.state[13], self.state[14]])
         W = np.array([self.state[15], self.state[16], self.state[17]]) / self.W_lim
+
+        # Re-orthonormalize:
+        R = R_vec.reshape(3, 3, order='F')
+        if not isRotationMatrix(R):
+            ''' https://www.codefull.net/2017/07/orthonormalize-a-rotation-matrix/ '''
+            u, s, vh = linalg.svd(R, full_matrices=False)
+            R = u @ vh
+            R_vec = R.reshape(9, 1, order='F').flatten()
+
         self.state = np.concatenate((x, v, R_vec, W), axis=0)
 
-        obs = self.state
-
-        return obs
+        return self.state
     
 
     def reward_wrapper(self, obs, action, prev_action):
@@ -289,24 +298,27 @@ class QuadEnv(gym.Env):
         C_X = self.C_X # pos coef.
         C_V = self.C_V # vel coef.
         C_W = self.C_W # ang_vel coef.
+        C_R = self.C_R # att coef.
         C_Ad = self.C_Ad # for smooth control
         C_Am = self.C_Am # for smooth control
 
+        '''
         reward = C_X*max(0, 1.0 - linalg.norm(eX, 2)) \
                - C_V * linalg.norm(eV, 2) \
                - C_W * linalg.norm(W, 2) \
                - C_Ad * (abs(prev_action - action)).sum() \
-               - C_Am * (abs(action)).sum()
+               - C_Am * (abs(action - self.f_each)).sum()
+               #C_X*max(0, (1.0-abs(eX)[0]) + (1.0-abs(eX)[1]) + (1.0-abs(eX)[2]))
         reward = np.interp(reward, [-C_X, C_X], [0.0, 1.0]) # normalized into [0,1]
-
         '''
-        reward = C_X*max(0, -(np.log(abs(eX)[0])+np.log(abs(eX)[1])+np.log(abs(eX)[2]))) \
+
+        reward = C_X*max(0, -(np.log(abs(eX)[0])+np.log(abs(eX)[1])+0.7*np.log(abs(eX)[2]))) \
                - C_V * linalg.norm(eV, 2) \
                - C_W * linalg.norm(W, 2) \
+               - C_R * angle_of_vectors(self.b1d, get_current_b1(R)) \
                - C_Ad * (abs(prev_action - action)).sum() \
                - C_Am * (abs(action)).sum() \
                #+ C_W*max(0, -(np.log(abs(W)[0])+np.log(abs(W)[1])+np.log(abs(W)[2]))) \
-        '''
 
         reward *= 0.1 # rescaled by a factor of 0.1
 

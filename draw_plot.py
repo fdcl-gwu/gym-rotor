@@ -7,7 +7,7 @@ import gym_rotor
 
 # data load and indexing
 is_SAVE = True
-log_date = np.loadtxt('log_11-24-2022_11-41-15.dat')
+log_date = np.loadtxt('log_12-06-2022_16-29-43.dat')
 start_index = 3
 end_index = len(log_date)
 time_now = datetime.now().strftime("%H-%M-%S-%m-%d-%Y")
@@ -211,4 +211,4 @@ axs[2, 2].grid(True)
 axs[2, 2].legend()
 if is_SAVE:
     plt.savefig(time_now+'_plots_R_states'+'.jpg')   
-plt.show()
+#plt.show()

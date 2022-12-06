@@ -1,6 +1,7 @@
 import numpy as np
+from numpy import linalg
 from numpy.linalg import norm
-from math import cos, sin, atan2, sqrt, pi
+from math import cos, sin, atan2, sqrt, acos, degrees
 
 
 def hat(x):
@@ -19,6 +20,21 @@ def vee(M):
 
     return np.array(vee_M)
 
+
+def get_current_b1(R):
+    e1 = np.array([1.0, 0.0, 0.0]) 
+    b1 = R.dot(e1)
+    theta = np.arctan2(b1[1], b1[0])
+    return np.array([np.cos(theta), np.sin(theta), 0.0])
+
+
+def angle_of_vectors(vec1, vec2):
+    unit_vector_1 = vec1 / linalg.norm(vec1)
+    unit_vector_2 = vec2 / linalg.norm(vec2)
+    dot_product = np.dot(unit_vector_1, unit_vector_2)
+    angle = np.arccos(dot_product)
+    return angle
+    
 
 def eulerAnglesToRotationMatrix(theta) :
     # Calculates Rotation Matrix given euler angles.
