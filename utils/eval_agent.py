@@ -43,7 +43,8 @@ def eval_agent(policy, avrg_act, args):
                 action = policy.select_action(np.array(state))
             # Control input saturation:
             eX = np.round(state[0:3]*eval_env.x_lim, 5) # position error [m]
-            action = ctrl_sat(action, eX, -1., +1., eval_env)
+            if args.wrapper_id == "CtrlSatWrapper":
+                action = ctrl_sat(action, eX, -1., +1., eval_env)
             # Concatenate `action` and `prev_action:
             action_step = np.concatenate((action, prev_action), axis=None)
 

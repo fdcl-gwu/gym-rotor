@@ -315,7 +315,7 @@ class QuadEnv(gym.Env):
         reward = C_X*max(0, -(np.log(abs(eX)[0])+np.log(abs(eX)[1])+0.7*np.log(abs(eX)[2]))) \
                - C_V * linalg.norm(eV, 2) \
                - C_W * linalg.norm(W, 2) \
-               - C_R * angle_of_vectors(self.b1d, get_current_b1(R)) \
+               - C_R * sqrt(angle_of_vectors(self.b1d, get_current_b1(R))) \
                - C_Ad * (abs(prev_action - action)).sum() \
                - C_Am * (abs(action)).sum() \
                #+ C_W*max(0, -(np.log(abs(W)[0])+np.log(abs(W)[1])+np.log(abs(W)[2]))) \

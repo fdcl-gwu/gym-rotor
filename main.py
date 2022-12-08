@@ -34,7 +34,7 @@ if __name__ == "__main__":
     parser.add_argument('--env_id', default="Quad-v0",
                     help='Name of OpenAI Gym environment (default: Quad-v0)')
     parser.add_argument('--wrapper_id', default="",
-                    help='Name of wrapper: Sim2RealWrapper, EquivWrapper')    
+                    help='Name of wrapper: Sim2RealWrapper, EquivWrapper, CtrlSatWrapper')    
     parser.add_argument('--max_steps', default=1800, type=int,
                     help='Maximum number of steps in each episode (default: 3000)')
     parser.add_argument('--max_timesteps', default=int(1e8), type=int,
@@ -44,7 +44,7 @@ if __name__ == "__main__":
     # Args of Agents:
     parser.add_argument("--policy", default="TD3_CAPS",
                     help='Which algorithms? DDPG or TD3 or TD3_CAPS(default: TD3)')
-    parser.add_argument("--hidden_dim", default=128, type=int, 
+    parser.add_argument("--hidden_dim", default=64, type=int, 
                     help='Number of nodes in hidden layers (default: 256)')
     parser.add_argument('--discount', default=0.99, type=float, metavar='G',
                         help='discount factor, gamma (default: 0.99)')
@@ -142,10 +142,10 @@ if __name__ == "__main__":
     if not os.path.exists("./results"):
         os.makedirs("./results")
     log_epi_path  = os.path.join("./results", "log_epi.txt") 
-    log_step_path = os.path.join("./results", "log_step.txt")   
+    #log_step_path = os.path.join("./results", "log_step.txt")   
     log_eval_path = os.path.join("./results", "log_eval.txt")   
     log_epi  = open(log_epi_path, "w+")  # no. episode vs. Total reward vs. Each timesteps
-    log_step = open(log_step_path, "w+") # Total timesteps vs. Total reward
+    #log_step = open(log_step_path, "w+") # Total timesteps vs. Total reward
     log_eval = open(log_eval_path,"w+")  # Total timesteps vs. Evaluated average reward
 
     # Initialize environment:
@@ -178,7 +178,8 @@ if __name__ == "__main__":
             ).clip(min_act, max_act)
         # Control input saturation:
         eX = np.round(state[0:3]*env.x_lim, 5) # position error [m]
-        action = ctrl_sat(action, eX, min_act, max_act, env)
+        if args.wrapper_id == "CtrlSatWrapper":
+            action = ctrl_sat(action, eX, min_act, max_act, env)
         # Concatenate `action` and `prev_action:
         action_step = np.concatenate((action, prev_action), axis=None)
 
@@ -197,7 +198,7 @@ if __name__ == "__main__":
         # Episode termination:
         if (abs(eX) <= 0.005).all(): # problem is solved!
             done = True
-            policy.save(f"./models/{file_name+ '_solved'}") # save solved model
+            policy.save(f"./models/{file_name+ '_solved_' + str(total_timesteps)}") # save solved model
         if episode_timesteps == args.max_steps:
             done = True
         done_bool = float(done) if episode_timesteps < args.max_steps else 0
@@ -230,9 +231,10 @@ if __name__ == "__main__":
             # Log data:
             log_epi.write('{}\t {}\t {}\t {}\n'.format(i_episode+1, episode_reward, episode_timesteps, best_model))
             log_epi.flush()
+            '''
             if total_timesteps >= args.start_timesteps:
                 log_step.write('{}\t {}\n'.format(total_timesteps+1, episode_reward))
-                log_step.flush()
+                log_step.flush()'''
 
             # Reset environment:
             state, done = env.reset(env_type='train'), False

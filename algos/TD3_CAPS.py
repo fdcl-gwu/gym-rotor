@@ -193,7 +193,7 @@ class TD3_CAPS(object):
             actor_loss = -self.critic.Q1(state, self.actor(state)).mean()
             
             # Regularizing action policies for smooth control
-            lam_T = 0.1
+            lam_T = 0.5
             if lam_T > 0: # Temporal Smoothness
                 action_T = (self.actor(state)).clamp(self.min_act, self.max_act) 
                 next_action_T = (self.actor(next_state)).clamp(self.min_act, self.max_act) 

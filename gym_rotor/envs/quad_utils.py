@@ -31,8 +31,9 @@ def get_current_b1(R):
 def angle_of_vectors(vec1, vec2):
     unit_vector_1 = vec1 / linalg.norm(vec1)
     unit_vector_2 = vec2 / linalg.norm(vec2)
-    dot_product = np.dot(unit_vector_1, unit_vector_2)
+    dot_product = np.clip(np.dot(unit_vector_1, unit_vector_2), -1., 1.)
     angle = np.arccos(dot_product)
+    angle = 0. if angle < 1e-6 else angle
     return angle
     
 
