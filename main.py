@@ -151,10 +151,8 @@ if __name__ == "__main__":
     # Initialize environment:
     state, done = env.reset(env_type='train'), False
     action = avrg_act * np.ones(4)
-    i_episode = 0
+    i_episode, episode_timesteps, episode_reward = 0, 0, 0
     i_eval = 1  
-    episode_reward = 0
-    episode_timesteps = 0
 
     # Training loop:
     for total_timesteps in range(int(args.max_timesteps)):
@@ -196,11 +194,10 @@ if __name__ == "__main__":
             env.render()
 
         # Episode termination:
-        if (abs(eX) <= 0.005).all(): # problem is solved!
-            done = True
-            policy.save(f"./models/{file_name+ '_solved_' + str(total_timesteps)}") # save solved model
         if episode_timesteps == args.max_steps:
             done = True
+            if (abs(eX) <= 0.005).all(): # problem is solved!
+                policy.save(f"./models/{file_name+ '_solved_' + str(total_timesteps)}") # save solved model
         done_bool = float(done) if episode_timesteps < args.max_steps else 0
 
         # Store a set of transitions in replay buffer
@@ -239,9 +236,8 @@ if __name__ == "__main__":
             # Reset environment:
             state, done = env.reset(env_type='train'), False
             action = avrg_act * np.ones(4)  
+            episode_timesteps, episode_reward = 0, 0
             i_episode += 1 
-            episode_reward = 0
-            episode_timesteps = 0
 
         # Evaluate episode
         if (total_timesteps+1) % args.eval_freq == 0:

@@ -25,8 +25,7 @@ def eval_agent(policy, avrg_act, args):
         action = avrg_act * np.ones(4) 
 
         if args.save_log:
-            action_list = []
-            state_list  = []
+            action_list, state_list = [], []
 
         while not done:
             episode_timesteps += 1

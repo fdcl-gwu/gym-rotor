@@ -58,7 +58,7 @@ class QuadEnv(gym.Env):
         self.C_X = 0.35 # pos coef.
         self.C_V = 0.15 # vel coef.
         self.C_W = 0.25 # ang_vel coef.
-        self.C_R = 0.1 # att coef.
+        self.C_R = 0.01 # att coef.
         self.C_Ad = 0.0 # for smooth control
         self.C_Am = 0.005 # 0.03 for smooth control
 
@@ -178,7 +178,7 @@ class QuadEnv(gym.Env):
             u, s, vh = linalg.svd(R, full_matrices=False)
             R = u @ vh
         R_vec = R.reshape(9, 1, order='F').flatten()
-        self.b1d = get_current_b1(R) # desired heading direction        
+        #self.b1d = get_current_b1(R) # desired heading direction        
 
         # Normalization
         x_norm = np.array([self.state[0], self.state[1], self.state[2]]) / self.x_lim # [m]
@@ -311,13 +311,19 @@ class QuadEnv(gym.Env):
                #C_X*max(0, (1.0-abs(eX)[0]) + (1.0-abs(eX)[1]) + (1.0-abs(eX)[2]))
         reward = np.interp(reward, [-C_X, C_X], [0.0, 1.0]) # normalized into [0,1]
         '''
+        
+        eps = 1e-10 # to prevent -log(0) = inf
+        eX = np.where(abs(eX)<=eps, eX*eps, eX)
+        eR = angle_of_vectors(get_current_b1(R), self.b1d) # [rad], heading error
+        eR = np.interp(eR, [0., pi], [eps, 1.0]) # normalized into [0,1]
 
-        reward = C_X*max(0, -(np.log(abs(eX)[0])+np.log(abs(eX)[1])+0.7*np.log(abs(eX)[2]))) \
-               - C_V * linalg.norm(eV, 2) \
-               - C_W * linalg.norm(W, 2) \
-               - C_R * sqrt(angle_of_vectors(self.b1d, get_current_b1(R))) \
-               - C_Ad * (abs(prev_action - action)).sum() \
-               - C_Am * (abs(action)).sum() \
+        reward = C_X*max(0, -(np.log(abs(eX)[0])+np.log(abs(eX)[1])+0.6*np.log(abs(eX)[2]))) \
+               + C_R*max(0, -np.log(eR)) \
+               - C_V*linalg.norm(eV, 2) \
+               - C_W*linalg.norm(W, 2) \
+               - C_Ad*(abs(prev_action - action)).sum() \
+               - C_Am*(abs(action)).sum() \
+               #- C_R * angle_of_vectors(self.b1d, get_current_b1(R)) \
                #+ C_W*max(0, -(np.log(abs(W)[0])+np.log(abs(W)[1])+np.log(abs(W)[2]))) \
 
         reward *= 0.1 # rescaled by a factor of 0.1
