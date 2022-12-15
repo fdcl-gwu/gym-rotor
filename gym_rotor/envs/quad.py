@@ -318,7 +318,7 @@ class QuadEnv(gym.Env):
         # To avoid `-log(0) = inf`
         eps = 1e-10
         eX = np.where(abs(eX)<=eps, eX*eps, eX)
-        eR = eR*eps if eR<=eps else eR
+        eR = eps if eR<=eps else eR
 
         reward = C_X*max(0, -(np.log(abs(eX)[0])+np.log(abs(eX)[1])+0.6*np.log(abs(eX)[2]))) \
                + C_R*max(0, -np.log(eR)) \
