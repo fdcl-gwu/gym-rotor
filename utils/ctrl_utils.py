@@ -39,8 +39,8 @@ def rot_e3(state):
     x = np.array([state[0], state[1], state[2]])
     v = np.array([state[3], state[4], state[5]])
     R_vec = np.array([state[6],  state[7],  state[8],
-                        state[9],  state[10], state[11],
-                        state[12], state[13], state[14]])
+                      state[9],  state[10], state[11],
+                      state[12], state[13], state[14]])
     R = R_vec.reshape(3, 3, order='F')
     W = np.array([state[15], state[16], state[17]])
 

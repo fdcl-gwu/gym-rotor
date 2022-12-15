@@ -35,7 +35,7 @@ if __name__ == "__main__":
                     help='Name of OpenAI Gym environment (default: Quad-v0)')
     parser.add_argument('--wrapper_id', default="",
                     help='Name of wrapper: Sim2RealWrapper, EquivWrapper, CtrlSatWrapper')    
-    parser.add_argument('--max_steps', default=1800, type=int,
+    parser.add_argument('--max_steps', default=2000, type=int,
                     help='Maximum number of steps in each episode (default: 3000)')
     parser.add_argument('--max_timesteps', default=int(1e8), type=int,
                     help='Number of total timesteps (default: 1e8)')

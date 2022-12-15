@@ -1,10 +1,13 @@
 import torch
 import numpy as np
+from numpy import linalg
 from datetime import datetime
 
 import gym
 import gym_rotor
+from gym_rotor.envs.quad_utils import *
 from utils.ctrl_utils import *
+
 
 # Runs policy for n episodes and returns average reward.
 def eval_agent(policy, avrg_act, args):
@@ -20,15 +23,23 @@ def eval_agent(policy, avrg_act, args):
     episode_eval = 5
     avg_reward = 0.0
     for _ in range(episode_eval):
+        # Goal state:
+        xd = np.array([0.0, 0.0, 0.0])/eval_env.x_lim 
+        xd_dot = np.array([0.0, 0.0, 0.0])/eval_env.v_lim 
+        Wd = np.array([0.0, 0.0, 0.0])/eval_env.W_lim 
+        b1d = np.array([1.0, 0.0, 0.0]) # desired heading direction
+        # b1d = get_current_b1(R)
+
+        # State:
         state, done = eval_env.reset(env_type='eval'), False
+
         episode_timesteps = 0
         action = avrg_act * np.ones(4) 
 
         if args.save_log:
-            action_list, state_list = [], []
+            act_list, obs_list, cmd_list = [], [], []
 
         while not done:
-            episode_timesteps += 1
 
             if args.wrapper_id == "EquivWrapper":
                 state_equiv = rot_e3(state)
@@ -50,25 +61,29 @@ def eval_agent(policy, avrg_act, args):
             # Perform action
             state, reward, done, _ = eval_env.step(action_step)
 
-            # eval_env.render() # 3D visualization:
+            # 3D visualization:
+            #eval_env.render() 
             
             # Cumulative rewards:
             avg_reward += reward
 
+            episode_timesteps += 1
+
             # Save data:
             if args.save_log:
-                action_list.append(np.concatenate((action), axis=None))
-                state_list.append(state)
+                act_list.append(np.concatenate((action), axis=None))
+                obs_list.append(np.concatenate((state), axis=None))
+                cmd_list.append(np.concatenate((xd, xd_dot, b1d, Wd), axis=None))
 
             if episode_timesteps == args.max_steps:
                 done = True
 
         # Save data
         if args.save_log:
-            min_len = min(len(action_list), len(state_list))
-            log_data = np.column_stack((action_list[-min_len:], state_list[-min_len:]))
+            min_len = min(len(act_list), len(obs_list), len(cmd_list))
+            log_data = np.column_stack((act_list[-min_len:], obs_list[-min_len:], cmd_list[-min_len:]))
             header = "Actions and States\n"
-            header += "action[0], ..., action[4], state[0], ..., state[17]" 
+            header += "action[0], ..., state[0], ..., command[0], ..." 
             time_now = datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
             np.savetxt('log_'+time_now+'.dat', log_data, header=header, fmt='%.10f') 
 

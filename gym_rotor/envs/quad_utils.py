@@ -6,8 +6,8 @@ from math import cos, sin, atan2, sqrt, acos, degrees
 
 def hat(x):
     hat_x = np.array([[0.0, -x[2], x[1]], \
-                        [x[2], 0.0, -x[0]], \
-                        [-x[1], x[0], 0.0]])
+                      [x[2], 0.0, -x[0]], \
+                      [-x[1], x[0], 0.0]])
                     
     return np.array(hat_x)
 
@@ -15,8 +15,8 @@ def hat(x):
 def vee(M):
     # vee map: inverse of the hat map
     vee_M = np.array([[M[2,1]], \
-                        [M[0,2]], \
-                        [M[1,0]]])
+                      [M[0,2]], \
+                      [M[1,0]]])
 
     return np.array(vee_M)
 
