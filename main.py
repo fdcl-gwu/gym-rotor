@@ -22,9 +22,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Reinforcement Learning for Quadrotor UAV')
     parser.add_argument("--save_model", default=True, action="store_true",
                     help='Save models and optimizer parameters (default: True)')
-    parser.add_argument("--load_model", default=True, type=bool,
+    parser.add_argument("--load_model", default=False, type=bool,
                     help='Load and test trained models (default: False)')   
-    parser.add_argument("--save_log", default=True, type=bool,
+    parser.add_argument("--save_log", default=False, type=bool,
                     help='Load trained models and save log(default: False)')      
     parser.add_argument("--eval_freq", default=1e4, type=int,
                     help='How often (time steps) evaluate our trained model')       
@@ -35,7 +35,7 @@ if __name__ == "__main__":
                     help='Name of OpenAI Gym environment (default: Quad-v0)')
     parser.add_argument('--wrapper_id', default="",
                     help='Name of wrapper: Sim2RealWrapper')    
-    parser.add_argument('--aux_id', default="",
+    parser.add_argument('--aux_id', default="EquivWrapper",
                     help='Name of auxiliary technique: EquivWrapper, CtrlSatWrapper')    
     parser.add_argument('--max_steps', default=2000, type=int,
                     help='Maximum number of steps in each episode (default: 3000)')
@@ -90,7 +90,7 @@ if __name__ == "__main__":
 
     # Initialize policy:
     state_dim  = env.observation_space.shape[0]
-    if args.wrapper_id == "EquivWrapper":
+    if args.aux_id == "EquivWrapper":
         state_dim -= 1 # (_x1, _x3, _v1, _v2, _v3)
     action_dim = env.action_space.shape[0] 
     min_act = env.action_space.low[0]
@@ -160,7 +160,7 @@ if __name__ == "__main__":
     for total_timesteps in range(int(args.max_timesteps)):
         episode_timesteps += 1
 
-        if args.wrapper_id == "EquivWrapper":
+        if args.aux_id == "EquivWrapper":
             state_equiv = rot_e3(state)
 
         # Keep previous action:
@@ -169,7 +169,7 @@ if __name__ == "__main__":
         if total_timesteps < args.start_timesteps:
             action = env.action_space.sample() 
         else:
-            if args.wrapper_id == "EquivWrapper":
+            if args.aux_id == "EquivWrapper":
                 action = policy.select_action(np.array(state_equiv))
             else:
                 action = policy.select_action(np.array(state))
@@ -178,7 +178,7 @@ if __name__ == "__main__":
             ).clip(min_act, max_act)
         # Control input saturation:
         eX = np.round(state[0:3]*env.x_lim, 5) # position error [m]
-        if args.wrapper_id == "CtrlSatWrapper":
+        if args.aux_id == "CtrlSatWrapper":
             action = ctrl_sat(action, eX, min_act, max_act, env)
         # Concatenate `action` and `prev_action:
         action_step = np.concatenate((action, prev_action), axis=None)
@@ -188,7 +188,7 @@ if __name__ == "__main__":
         if done: # Out of boundry
             reward = -1.0
 
-        if args.wrapper_id == "EquivWrapper":
+        if args.aux_id == "EquivWrapper":
             next_state_equiv = rot_e3(next_state)
 
         # 3D visualization:
@@ -203,7 +203,7 @@ if __name__ == "__main__":
         done_bool = float(done) if episode_timesteps < args.max_steps else 0
 
         # Store a set of transitions in replay buffer
-        if args.wrapper_id == "EquivWrapper":
+        if args.aux_id == "EquivWrapper":
             replay_buffer.add(state_equiv, action, next_state_equiv, reward, done_bool)
         else:
             replay_buffer.add(state, action, next_state, reward, done_bool)

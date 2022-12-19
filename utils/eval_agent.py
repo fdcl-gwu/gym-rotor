@@ -41,19 +41,19 @@ def eval_agent(policy, avrg_act, args):
 
         while not done:
 
-            if args.wrapper_id == "EquivWrapper":
+            if args.aux_id == "EquivWrapper":
                 state_equiv = rot_e3(state)
 
             # Keep previous action:
             prev_action = action 
             # Select action according to policy:
-            if args.wrapper_id == "EquivWrapper":
+            if args.aux_id == "EquivWrapper":
                 action = policy.select_action(np.array(state_equiv))
             else:
                 action = policy.select_action(np.array(state))
             # Control input saturation:
             eX = np.round(state[0:3]*eval_env.x_lim, 5) # position error [m]
-            if args.wrapper_id == "CtrlSatWrapper":
+            if args.aux_id == "CtrlSatWrapper":
                 action = ctrl_sat(action, eX, -1., +1., eval_env)
             # Concatenate `action` and `prev_action:
             action_step = np.concatenate((action, prev_action), axis=None)
