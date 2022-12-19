@@ -42,7 +42,7 @@ if __name__ == "__main__":
                     help='Maximum number of steps in each episode (default: 3000)')
     parser.add_argument('--max_timesteps', default=int(1e8), type=int,
                     help='Number of total timesteps (default: 1e8)')
-    parser.add_argument('--render', default=False, type=bool,
+    parser.add_argument('--render', default=True, type=bool,
                     help='Simulation visualization (default: False)')
     # Args of Agents:
     parser.add_argument("--policy", default="TD3_CAPS",
@@ -147,16 +147,13 @@ if __name__ == "__main__":
     # Setup loggers:
     if not os.path.exists("./results"):
         os.makedirs("./results")
-    log_epi_path  = os.path.join("./results", "log_epi.txt") 
-    #log_step_path = os.path.join("./results", "log_step.txt")   
+    log_step_path = os.path.join("./results", "log_step.txt")   
     log_eval_path = os.path.join("./results", "log_eval.txt")   
-    log_epi  = open(log_epi_path, "w+")  # no. episode vs. Total reward vs. Each timesteps
-    #log_step = open(log_step_path, "w+") # Total timesteps vs. Total reward
+    log_step = open(log_step_path, "w+") # Total timesteps vs. Total reward
     log_eval = open(log_eval_path,"w+")  # Total timesteps vs. Evaluated average reward
 
     # Initialize environment:
     state, done = env.reset(env_type='train'), False
-    action = avrg_act * np.ones(4)
     i_episode, episode_timesteps, episode_reward = 0, 0, 0
     i_eval = 1  
 
@@ -167,8 +164,6 @@ if __name__ == "__main__":
         if args.aux_id == "EquivWrapper":
             state_equiv = rot_e3(state)
 
-        # Keep previous action:
-        prev_action = action 
         # Select action randomly or from policy:
         if total_timesteps < args.start_timesteps:
             action = env.action_space.sample() 
@@ -184,13 +179,9 @@ if __name__ == "__main__":
         eX = np.round(state[0:3]*env.x_lim, 5) # position error [m]
         if args.aux_id == "CtrlSatWrapper":
             action = ctrl_sat(action, eX, min_act, max_act, env)
-        # Concatenate `action` and `prev_action:
-        action_step = np.concatenate((action, prev_action), axis=None)
 
         # Perform action:
-        next_state, reward, done, _ = env.step(action_step)
-        if done: # Out of boundry
-            reward = -1.0
+        next_state, reward, done, _ = env.step(action)
 
         if args.aux_id == "EquivWrapper":
             next_state_equiv = rot_e3(next_state)
@@ -200,11 +191,13 @@ if __name__ == "__main__":
             env.render()
 
         # Episode termination:
-        if episode_timesteps == args.max_steps:
+        if episode_timesteps == args.max_steps: # Episode terminated!
             done = True
-            if (abs(eX) <= 0.007).all(): # problem is solved!
-                policy.save(f"./models/{file_name+ '_solved_' + str(total_timesteps)}") # save solved model
-        done_bool = float(done) if episode_timesteps < args.max_steps else 0
+        done_bool = float(done) if episode_timesteps < args.max_steps else 0.
+        # Problem is solved!
+        if (abs(eX) <= 0.007).all() and episode_timesteps == args.max_steps: 
+            policy.save(f"./models/{file_name+ '_solved_' + str(total_timesteps)}") # save solved model
+            done_bool = 1.
 
         # Store a set of transitions in replay buffer
         if args.aux_id == "EquivWrapper":
@@ -232,16 +225,12 @@ if __name__ == "__main__":
                 best_model = ''
 
             # Log data:
-            log_epi.write('{}\t {}\t {}\t {}\n'.format(i_episode+1, episode_reward, episode_timesteps, best_model))
-            log_epi.flush()
-            '''
             if total_timesteps >= args.start_timesteps:
-                log_step.write('{}\t {}\n'.format(total_timesteps+1, episode_reward))
-                log_step.flush()'''
+                log_step.write('{}\t {}\n'.format(total_timesteps+1, episode_reward, best_model))
+                log_step.flush()
 
             # Reset environment:
             state, done = env.reset(env_type='train'), False
-            action = avrg_act * np.ones(4)  
             episode_timesteps, episode_reward = 0, 0
             i_episode += 1 
 

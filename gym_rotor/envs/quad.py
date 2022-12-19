@@ -60,8 +60,7 @@ class QuadEnv(gym.Env):
         self.C_V = 0.15 # vel coef.
         self.C_W = 0.25 # ang_vel coef.
         self.C_R = 0.25 # att coef.
-        self.C_Ad = 0.0 # for smooth control
-        self.C_Am = 0.005 # 0.03 for smooth control
+        self.C_A = 0.005 # for efficient control
 
         # Commands:
         self.xd     = np.array([0.0, 0.0, 0.0]) # desired tracking position command, [m] 
@@ -105,11 +104,7 @@ class QuadEnv(gym.Env):
         self.seed()
 
 
-    def step(self, action_step):
-        # De-concatenate `action_step`:
-        action = action_step[0:4]
-        prev_action = action_step[4:8]
-
+    def step(self, action):
         # Action:
         action = self.action_wrapper(action) # [N] 
 
@@ -120,36 +115,38 @@ class QuadEnv(gym.Env):
         obs = self.observation_wrapper(state)
 
         # Reward function:
-        reward = self.reward_wrapper(obs, action, prev_action)
+        reward = self.reward_wrapper(obs, action)
 
         # Terminal condition:
         done = self.done_wrapper(obs)
+        if done: # Out of boundry or crashed!
+            reward = -1.
 
         return obs, reward, done, {}
 
 
     def reset(self, env_type='train'):
         # Reset states & Normalization:
-        self.state = np.array(np.zeros(18))
-        self.state[6:15] = np.eye(3).reshape(1, 9, order='F')
+        state = np.array(np.zeros(18))
+        state[6:15] = np.eye(3).reshape(1, 9, order='F')
 
         # Initial state error:
         self.sample_init_error(env_type)
 
         # x, position:
-        self.state[0] = uniform(size=1, low=-self.init_x_error, high=self.init_x_error) 
-        self.state[1] = uniform(size=1, low=-self.init_x_error, high=self.init_x_error) 
-        self.state[2] = uniform(size=1, low=-self.init_x_error, high=self.init_x_error)
+        state[0] = uniform(size=1, low=-self.init_x_error, high=self.init_x_error) 
+        state[1] = uniform(size=1, low=-self.init_x_error, high=self.init_x_error) 
+        state[2] = uniform(size=1, low=-self.init_x_error, high=self.init_x_error)
 
         # v, velocity:
-        self.state[3] = uniform(size=1, low=-self.init_v_error, high=self.init_v_error) 
-        self.state[4] = uniform(size=1, low=-self.init_v_error, high=self.init_v_error) 
-        self.state[5] = uniform(size=1, low=-self.init_v_error, high=self.init_v_error)
+        state[3] = uniform(size=1, low=-self.init_v_error, high=self.init_v_error) 
+        state[4] = uniform(size=1, low=-self.init_v_error, high=self.init_v_error) 
+        state[5] = uniform(size=1, low=-self.init_v_error, high=self.init_v_error)
 
         # W, angular velocity:
-        self.state[15] = uniform(size=1, low=-self.init_W_error, high=self.init_W_error) 
-        self.state[16] = uniform(size=1, low=-self.init_W_error, high=self.init_W_error) 
-        self.state[17] = uniform(size=1, low=-self.init_W_error, high=self.init_W_error) 
+        state[15] = uniform(size=1, low=-self.init_W_error, high=self.init_W_error) 
+        state[16] = uniform(size=1, low=-self.init_W_error, high=self.init_W_error) 
+        state[17] = uniform(size=1, low=-self.init_W_error, high=self.init_W_error) 
 
         # R, attitude:
         pitch = uniform(size=1, low=-self.init_R_error, high=self.init_R_error)
@@ -158,15 +155,15 @@ class QuadEnv(gym.Env):
         R = euler2mat(roll, pitch, yaw) 
         """
         # NED; https://www.wilselby.com/research/arducopter/modeling/
-        self.state[6]  = cos(theta)*cos(psi)
-        self.state[7]  = cos(theta)*sin(psi) 
-        self.state[8]  = -sin(theta) 
-        self.state[9]  = sin(phi)*sin(theta)*cos(psi) - cos(phi)*sin(psi)
-        self.state[10] = sin(phi)*sin(theta)*sin(psi) + cos(phi)*cos(psi)
-        self.state[11] = sin(phi)*cos(theta)
-        self.state[12] = cos(phi)*sin(theta)*cos(psi) + sin(phi)*sin(psi)
-        self.state[13] = cos(phi)*sin(theta)*sin(psi) - sin(phi)*cos(psi)
-        self.state[14] = cos(phi)*cos(theta)
+        state[6]  = cos(theta)*cos(psi)
+        state[7]  = cos(theta)*sin(psi) 
+        state[8]  = -sin(theta) 
+        state[9]  = sin(phi)*sin(theta)*cos(psi) - cos(phi)*sin(psi)
+        state[10] = sin(phi)*sin(theta)*sin(psi) + cos(phi)*cos(psi)
+        state[11] = sin(phi)*cos(theta)
+        state[12] = cos(phi)*sin(theta)*cos(psi) + sin(phi)*sin(psi)
+        state[13] = cos(phi)*sin(theta)*sin(psi) - sin(phi)*cos(psi)
+        state[14] = cos(phi)*cos(theta)
         R_vec = np.array([self.state[6],  self.state[7],  self.state[8],
                           self.state[9],  self.state[10], self.state[11],
                           self.state[12], self.state[13], self.state[14]])
@@ -182,7 +179,7 @@ class QuadEnv(gym.Env):
         # self.b1d = get_current_b1(R) # desired heading direction     
 
         # Normalization: [max, min] -> [-1, 1]
-        x_norm, v_norm, R, W_norm = state_normalization(self.state, self.x_lim, self.v_lim, self.W_lim)
+        x_norm, v_norm, _, W_norm = state_normalization(state, self.x_lim, self.v_lim, self.W_lim)
         self.state = np.concatenate((x_norm, v_norm, R_vec, W_norm), axis=0)
         #self.b1d = rot_b1d(x_norm)   
 
@@ -249,7 +246,7 @@ class QuadEnv(gym.Env):
         return self.state
     
 
-    def reward_wrapper(self, obs, action, prev_action):
+    def reward_wrapper(self, obs, action):
         # Decomposing state vectors
         x, v, R, W = state_decomposition(obs)
 
@@ -258,13 +255,7 @@ class QuadEnv(gym.Env):
         C_V = self.C_V # vel coef.
         C_W = self.C_W # ang_vel coef.
         C_R = self.C_R # att coef.
-        C_Ad = self.C_Ad # for smooth control
-        C_Am = self.C_Am # for smooth control
-
-        # Previous actions:
-        prev_action = (
-            self.scale_act * prev_action + self.avrg_act
-            ).clip(self.min_force, self.max_force)
+        C_A = self.C_A # for efficient control
 
         # Errors:
         eX = x - self.xd     # position error
@@ -280,8 +271,7 @@ class QuadEnv(gym.Env):
                + C_R*max(0, -np.log(eR)) \
                - C_V*linalg.norm(eV, 2) \
                - C_W*linalg.norm(W, 2) \
-               - C_Ad*(abs(prev_action - action)).sum() \
-               - C_Am*(abs(action)).sum() \
+               - C_A*(abs(action)).sum() \
                #- C_R*np.sqrt(eR) \
                #+ C_W*max(0, -(np.log(abs(W)[0])+np.log(abs(W)[1])+np.log(abs(W)[2]))) \
 

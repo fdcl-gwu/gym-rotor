@@ -23,6 +23,9 @@ def eval_agent(policy, avrg_act, args):
     episode_eval = 5
     avg_reward = 0.0
     for _ in range(episode_eval):
+        # Data save:
+        if args.save_log:
+            act_list, obs_list, cmd_list = [], [], []
 
         # State:
         state, done = eval_env.reset(env_type='eval'), False
@@ -38,18 +41,10 @@ def eval_agent(policy, avrg_act, args):
         # b1d = get_current_b1(R) # desired heading direction
 
         episode_timesteps = 0
-        action = avrg_act * np.ones(4) 
-
-        if args.save_log:
-            act_list, obs_list, cmd_list = [], [], []
-
         while not done:
-
             if args.aux_id == "EquivWrapper":
                 state_equiv = rot_e3(state)
 
-            # Keep previous action:
-            prev_action = action 
             # Select action according to policy:
             if args.aux_id == "EquivWrapper":
                 action = policy.select_action(np.array(state_equiv))
@@ -59,11 +54,9 @@ def eval_agent(policy, avrg_act, args):
             eX = np.round(state[0:3]*eval_env.x_lim, 5) # position error [m]
             if args.aux_id == "CtrlSatWrapper":
                 action = ctrl_sat(action, eX, -1., +1., eval_env)
-            # Concatenate `action` and `prev_action:
-            action_step = np.concatenate((action, prev_action), axis=None)
 
             # Perform action
-            state, reward, done, _ = eval_env.step(action_step)
+            state, reward, done, _ = eval_env.step(action)
 
             # 3D visualization:
             #eval_env.render() 
