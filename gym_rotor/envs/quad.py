@@ -178,13 +178,14 @@ class QuadEnv(gym.Env):
             u, s, vh = linalg.svd(R, full_matrices=False)
             R = u @ vh
         R_vec = R.reshape(9, 1, order='F').flatten()
-        # self.b1d = get_current_b1(R) # desired heading direction        
+        # self.b1d = get_current_b1(R) # desired heading direction     
 
         # Normalization
         x_norm = np.array([self.state[0], self.state[1], self.state[2]]) / self.x_lim # [m]
         v_norm = np.array([self.state[3], self.state[4], self.state[5]]) / self.v_lim # [m/s]
         W_norm = np.array([self.state[15], self.state[16], self.state[17]]) / self.W_lim # [rad/s]
         self.state = np.concatenate((x_norm, v_norm, R_vec, W_norm), axis=0)
+        self.b1d = rot_b1d(x_norm)   
 
         # Reset forces & moments:
         self.f  = self.m * self.g

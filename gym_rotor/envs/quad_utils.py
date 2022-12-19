@@ -28,6 +28,25 @@ def get_current_b1(R):
     return np.array([np.cos(theta), np.sin(theta), 0.0])
 
 
+# Rotation on e3 axis
+def R_e3(theta):
+    return np.array([[cos(theta), -sin(theta), 0.0],
+                     [sin(theta),  cos(theta), 0.0],
+                     [       0.0,         0.0, 1.0]])
+
+# Equivariant b1d
+def rot_b1d(x):
+    # Compute theta:
+    theta_x = np.arctan2(x[1], x[0]) 
+
+    # Real desired heading direction:
+    b1d = np.array([1.0, 0.0, 0.0])  
+
+    # Imaginary desired heading direction:
+    b1d_equiv = R_e3(-theta_x) @ b1d
+
+    return b1d_equiv
+
 def angle_of_vectors(vec1, vec2):
     unit_vector_1 = vec1 / linalg.norm(vec1)
     unit_vector_2 = vec2 / linalg.norm(vec2)

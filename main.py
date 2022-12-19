@@ -198,7 +198,7 @@ if __name__ == "__main__":
         # Episode termination:
         if episode_timesteps == args.max_steps:
             done = True
-            if (abs(eX) <= 0.005).all(): # problem is solved!
+            if (abs(eX) <= 0.01).all(): # problem is solved!
                 policy.save(f"./models/{file_name+ '_solved_' + str(total_timesteps)}") # save solved model
         done_bool = float(done) if episode_timesteps < args.max_steps else 0
 
