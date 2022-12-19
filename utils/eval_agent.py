@@ -1,3 +1,4 @@
+import os
 import torch
 import numpy as np
 from numpy import linalg
@@ -7,7 +8,6 @@ import gym
 import gym_rotor
 from gym_rotor.envs.quad_utils import *
 from utils.ctrl_utils import *
-
 
 # Runs policy for n episodes and returns average reward.
 def eval_agent(policy, avrg_act, args):
@@ -84,8 +84,9 @@ def eval_agent(policy, avrg_act, args):
             log_data = np.column_stack((act_list[-min_len:], obs_list[-min_len:], cmd_list[-min_len:]))
             header = "Actions and States\n"
             header += "action[0], ..., state[0], ..., command[0], ..." 
-            time_now = datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
-            np.savetxt('log_'+time_now+'.dat', log_data, header=header, fmt='%.10f') 
+            time_now = datetime.now().strftime("%Hh_%Mm_%Ss")
+            fpath = os.path.join('./results', 'log_' + time_now + '.dat')
+            np.savetxt(fpath, log_data, header=header, fmt='%.10f') 
 
     avg_reward /= episode_eval
 

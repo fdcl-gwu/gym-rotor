@@ -1,4 +1,5 @@
 ## Importing Libraries
+import os
 import gym
 import gym_rotor
 import numpy as np
@@ -14,15 +15,16 @@ plt.rcParams['font.size'] = 18
 fontsize = 32
 
 # Data load and indexing:
-log_date = np.loadtxt('circle.dat') 
+file_name = 'log_18h_49m_09s'
+log_date = np.loadtxt(os.path.join('./results', file_name + '.dat')) 
 start_index = 3
-end_index = 3000#len(log_date)
-is_SAVE = False
+end_index = len(log_date)
+is_SAVE = True
 
 # Pre-processing:
 env = gym.make("Quad-v0")
 t = np.arange(end_index - start_index)*env.dt # time [sec]
-time_now = datetime.now().strftime("%H-%M-%S-%m-%d")
+time_now = datetime.now().strftime("%Hh_%Mm_%Ss")
 
 load_act  = log_date[:, 0:4] # automatically discards the headers
 load_obs  = log_date[:, 4:22] 
@@ -80,8 +82,7 @@ for label in (axs[2].get_xticklabels() + axs[2].get_yticklabels()):
 for label in (axs[3].get_xticklabels() + axs[3].get_yticklabels()):
 	label.set_fontsize(fontsize)
 if is_SAVE:
-    plt.savefig(time_now+'_plots_forces'+'.png', bbox_inches='tight')
-
+    plt.savefig(os.path.join('./results', time_now+'_1_T'+'.png'), bbox_inches='tight')
 
 ###################################################################################
 ############################# Plot States x, v, and W #############################
@@ -161,8 +162,7 @@ for label in (axs[2, 1].get_xticklabels() + axs[2, 1].get_yticklabels()):
 for label in (axs[2, 2].get_xticklabels() + axs[2, 2].get_yticklabels()):
 	label.set_fontsize(fontsize)
 if is_SAVE:
-    plt.savefig(time_now+'_plots_x_v_W_states'+'.png', bbox_inches='tight') 
-
+    plt.savefig(os.path.join('./results', time_now+'_2_x_v_W'+'.png'), bbox_inches='tight')
 
 #########################################################################
 ############################# Plot States R #############################
@@ -240,7 +240,8 @@ for label in (axs[2, 1].get_xticklabels() + axs[2, 1].get_yticklabels()):
 	label.set_fontsize(fontsize)
 for label in (axs[2, 2].get_xticklabels() + axs[2, 2].get_yticklabels()):
 	label.set_fontsize(fontsize)
-if is_SAVE:
-    plt.savefig(time_now+'_plots_R_states'+'.png', bbox_inches='tight')
 
-plt.show()
+if is_SAVE:
+    plt.savefig(os.path.join('./results', time_now+'_3_R'+'.png'), bbox_inches='tight')
+else:
+    plt.show()

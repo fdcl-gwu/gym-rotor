@@ -22,9 +22,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Reinforcement Learning for Quadrotor UAV')
     parser.add_argument("--save_model", default=True, action="store_true",
                     help='Save models and optimizer parameters (default: True)')
-    parser.add_argument("--load_model", default=False, type=bool,
+    parser.add_argument("--load_model", default=True, type=bool,
                     help='Load and test trained models (default: False)')   
-    parser.add_argument("--save_log", default=False, type=bool,
+    parser.add_argument("--save_log", default=True, type=bool,
                     help='Load trained models and save log(default: False)')      
     parser.add_argument("--eval_freq", default=1e4, type=int,
                     help='How often (time steps) evaluate our trained model')       
@@ -34,7 +34,9 @@ if __name__ == "__main__":
     parser.add_argument('--env_id', default="Quad-v0",
                     help='Name of OpenAI Gym environment (default: Quad-v0)')
     parser.add_argument('--wrapper_id', default="",
-                    help='Name of wrapper: Sim2RealWrapper, EquivWrapper, CtrlSatWrapper')    
+                    help='Name of wrapper: Sim2RealWrapper')    
+    parser.add_argument('--aux_id', default="",
+                    help='Name of auxiliary technique: EquivWrapper, CtrlSatWrapper')    
     parser.add_argument('--max_steps', default=2000, type=int,
                     help='Maximum number of steps in each episode (default: 3000)')
     parser.add_argument('--max_timesteps', default=int(1e8), type=int,
