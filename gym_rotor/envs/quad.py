@@ -331,7 +331,7 @@ class QuadEnv(gym.Env):
 
 
     def render(self, mode='human', close=False):
-        from vpython import box, sphere, color, vector, rate, canvas, cylinder, ring, arrow, scene, textures
+        from vpython import canvas, vector, box, sphere, color, rate, cylinder, arrow, ring, scene, textures
 
         # Rendering state:
         state_vis = np.copy(self.state)
@@ -351,77 +351,78 @@ class QuadEnv(gym.Env):
         # Init:
         if self.viewer is None:
             # Canvas.
-            self.viewer = canvas(title = 'Quadrotor with RL', width = 1024, height = 768, \
-                                 center = vector(0, 0, cmd_pos[2]), background = color.white, \
-                                 forward = vector(1, 0.3, 0.3), up = vector(0, 0, -1)) # forward = view point
+            self.viewer = canvas(title='Quadrotor with RL', width=1024, height=768, \
+                                 center=vector(0, 0, cmd_pos[2]), background=color.white, \
+                                 forward=vector(1, 0.3, 0.3), up=vector(0, 0, -1)) # forward = view point
             
             # Quad body.
-            self.render_quad1 = box(canvas = self.viewer, pos = vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
-                                    axis = vector(x_axis[0], x_axis[1], x_axis[2]), \
-                                    length = 0.2, height = 0.05, width = 0.05) # vector(quad_pos[0], quad_pos[1], 0)
-            self.render_quad2 = box(canvas = self.viewer, pos = vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
-                                    axis = vector(y_axis[0], y_axis[1], y_axis[2]), \
-                                    length = 0.2, height = 0.05, width = 0.05)
+            self.render_quad1 = box(canvas=self.viewer, pos=vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
+                                    axis=vector(x_axis[0], x_axis[1], x_axis[2]), \
+                                    length=0.2, height=0.05, width=0.05) # vector(quad_pos[0], quad_pos[1], 0)
+            self.render_quad2 = box(canvas=self.viewer, pos=vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
+                                    axis=vector(y_axis[0], y_axis[1], y_axis[2]), \
+                                    length=0.2, height=0.05, width=0.05)
             # Rotors.
             rotors_offest = 0.02
-            self.render_rotor1 = cylinder(canvas = self.viewer, pos = vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
-                                          axis = vector(rotors_offest*z_axis[0], rotors_offest*z_axis[1], rotors_offest*z_axis[2]), \
-                                          radius = 0.2, color = color.blue, opacity = 0.5)
-            self.render_rotor2 = cylinder(canvas = self.viewer, pos = vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
-                                          axis = vector(rotors_offest*z_axis[0], rotors_offest*z_axis[1], rotors_offest*z_axis[2]), \
-                                          radius = 0.2, color = color.cyan, opacity = 0.5)
-            self.render_rotor3 = cylinder(canvas = self.viewer, pos = vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
-                                          axis = vector(rotors_offest*z_axis[0], rotors_offest*z_axis[1], rotors_offest*z_axis[2]), \
-                                          radius = 0.2, color = color.blue, opacity = 0.5)
-            self.render_rotor4 = cylinder(canvas = self.viewer, pos = vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
-                                          axis = vector(rotors_offest*z_axis[0], rotors_offest*z_axis[1], rotors_offest*z_axis[2]), \
-                                          radius = 0.2, color = color.cyan, opacity = 0.5)
+            self.render_rotor1 = cylinder(canvas=self.viewer, pos=vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
+                                          axis=vector(rotors_offest*z_axis[0], rotors_offest*z_axis[1], rotors_offest*z_axis[2]), \
+                                          radius=0.2, color=color.blue, opacity=0.5)
+            self.render_rotor2 = cylinder(canvas=self.viewer, pos=vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
+                                          axis=vector(rotors_offest*z_axis[0], rotors_offest*z_axis[1], rotors_offest*z_axis[2]), \
+                                          radius=0.2, color=color.cyan, opacity=0.5)
+            self.render_rotor3 = cylinder(canvas=self.viewer, pos=vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
+                                          axis=vector(rotors_offest*z_axis[0], rotors_offest*z_axis[1], rotors_offest*z_axis[2]), \
+                                          radius=0.2, color=color.blue, opacity=0.5)
+            self.render_rotor4 = cylinder(canvas=self.viewer, pos=vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
+                                          axis=vector(rotors_offest*z_axis[0], rotors_offest*z_axis[1], rotors_offest*z_axis[2]), \
+                                          radius=0.2, color=color.cyan, opacity=0.5)
 
             # Force arrows.
-            self.render_force_rotor1 = arrow(pos = vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
-                                             axis = vector(z_axis[0], z_axis[1], z_axis[2]), \
-                                             shaftwidth = 0.05, color = color.blue)
-            self.render_force_rotor2 = arrow(pos = vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
-                                             axis = vector(z_axis[0], z_axis[1], z_axis[2]), \
-                                             shaftwidth = 0.05, color = color.cyan)
-            self.render_force_rotor3 = arrow(pos = vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
-                                             axis = vector(z_axis[0], z_axis[1], z_axis[2]), \
-                                             shaftwidth = 0.05, color = color.blue)
-            self.render_force_rotor4 = arrow(pos = vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
-                                             axis = vector(z_axis[0], z_axis[1], z_axis[2]), \
-                                             shaftwidth = 0.05, color = color.cyan)
+            self.render_force_rotor1 = arrow(pos=vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
+                                             axis=vector(z_axis[0], z_axis[1], z_axis[2]), \
+                                             shaftwidth=0.05, color=color.blue)
+            self.render_force_rotor2 = arrow(pos=vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
+                                             axis=vector(z_axis[0], z_axis[1], z_axis[2]), \
+                                             shaftwidth=0.05, color=color.cyan)
+            self.render_force_rotor3 = arrow(pos=vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
+                                             axis=vector(z_axis[0], z_axis[1], z_axis[2]), \
+                                             shaftwidth=0.05, color=color.blue)
+            self.render_force_rotor4 = arrow(pos=vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
+                                             axis=vector(z_axis[0], z_axis[1], z_axis[2]), \
+                                             shaftwidth=0.05, color=color.cyan)
                                     
             # Commands.
-            self.render_ref = sphere(canvas = self.viewer, pos = vector(cmd_pos[0], cmd_pos[1], cmd_pos[2]), \
-                                     radius = 0.07, color = color.red, \
-                                     make_trail = True, trail_type = 'points', interval = 50)									
+            self.render_ref = sphere(canvas=self.viewer, pos=vector(cmd_pos[0], cmd_pos[1], cmd_pos[2]), \
+                                     radius=0.07, color=color.red, \
+                                     make_trail=True, trail_type='points', interval=50)									
             
             # Inertial axis.				
-            self.e1_axis = arrow(pos = vector(2.5, -2.5, 0), axis = 0.5*vector(1, 0, 0), \
-                                 shaftwidth = 0.04, color=color.blue)
-            self.e2_axis = arrow(pos = vector(2.5, -2.5, 0), axis = 0.5*vector(0, 1, 0), \
-                                 shaftwidth = 0.04, color=color.green)
-            self.e3_axis = arrow(pos = vector(2.5, -2.5, 0), axis = 0.5*vector(0, 0, 1), \
-                                 shaftwidth = 0.04, color=color.red)
+            self.e1_axis = arrow(pos=vector(2.5, -2.5, 0), axis=0.5*vector(1, 0, 0), \
+                                 shaftwidth=0.04, color=color.blue)
+            self.e2_axis = arrow(pos=vector(2.5, -2.5, 0), axis=0.5*vector(0, 1, 0), \
+                                 shaftwidth=0.04, color=color.green)
+            self.e3_axis = arrow(pos=vector(2.5, -2.5, 0), axis=0.5*vector(0, 0, 1), \
+                                 shaftwidth=0.04, color=color.red)
 
             # Body axis.				
-            self.render_b1_axis = arrow(canvas = self.viewer, 
-                                        pos = vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
-                                        axis = vector(x_axis[0], x_axis[1], x_axis[2]), \
-                                        shaftwidth = 0.02, color = color.blue,
-                                        make_trail = True, trail_color = color.yellow)
-            self.render_b2_axis = arrow(canvas = self.viewer, 
-                                        pos = vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
-                                        axis = vector(y_axis[0], y_axis[1], y_axis[2]), \
-                                        shaftwidth = 0.02, color = color.green)
-            self.render_b3_axis = arrow(canvas = self.viewer, 
-                                        pos = vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
-                                        axis = vector(z_axis[0], z_axis[1], z_axis[2]), \
-                                        shaftwidth = 0.02, color = color.red)
+            self.render_b1_axis = arrow(canvas=self.viewer, 
+                                        pos=vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
+                                        axis=vector(x_axis[0], x_axis[1], x_axis[2]), \
+                                        shaftwidth=0.02, color=color.blue, \
+                                        make_trail=True, retain=60, interval=10, \
+                                        trail_type='points', trail_radius=0.03, trail_color=color.yellow)
+            self.render_b2_axis = arrow(canvas=self.viewer, 
+                                        pos=vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
+                                        axis=vector(y_axis[0], y_axis[1], y_axis[2]), \
+                                        shaftwidth=0.02, color=color.green)
+            self.render_b3_axis = arrow(canvas=self.viewer, 
+                                        pos=vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
+                                        axis=vector(z_axis[0], z_axis[1], z_axis[2]), \
+                                        shaftwidth=0.02, color=color.red)
 
             # Floor.
-            self.render_floor = box(pos = vector(0,0,0),size = vector(5,5,0.05), axis = vector(1,0,0), \
-                                    opacity = 0.2, color = color.black)
+            self.render_floor = box(pos=vector(0,0,0),size=vector(5,5,0.05), axis=vector(1,0,0), \
+                                    opacity=0.2, color=color.black)
 
 
         # Update visualization component:
