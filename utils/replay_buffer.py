@@ -16,7 +16,6 @@ class ReplayBuffer(object):
 		self.size = 0
 
 
-	# 
 	def add(self, state, action, next_state, reward, done):
 		self.state[self.num] = state
 		self.action[self.num] = action
@@ -28,7 +27,6 @@ class ReplayBuffer(object):
 		self.size = min(self.size + 1, self.replay_buffer_size)
 
 
-	# 
 	def sample(self, batch_size):
 		index = np.random.randint(0, self.size, size=batch_size)
 

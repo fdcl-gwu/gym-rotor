@@ -8,6 +8,7 @@ from datetime import datetime
 
 import gym
 import gym_rotor
+from gym_rotor.envs.s2r_wrapper import Sim2RealWrapper
 
 import algos.DDPG as DDPG
 import algos.TD3 as TD3
@@ -33,11 +34,11 @@ if __name__ == "__main__":
     # Args of Environment:
     parser.add_argument('--env_id', default="Quad-v0",
                     help='Name of OpenAI Gym environment (default: Quad-v0)')
-    parser.add_argument('--wrapper_id', default="",
+    parser.add_argument('--wrapper_id', default="Sim2RealWrapper",
                     help='Name of wrapper: Sim2RealWrapper')    
-    parser.add_argument('--aux_id', default="EquivWrapper",
+    parser.add_argument('--aux_id', default="",
                     help='Name of auxiliary technique: EquivWrapper, CtrlSatWrapper')    
-    parser.add_argument('--max_steps', default=2000, type=int,
+    parser.add_argument('--max_steps', default=10000, type=int,
                     help='Maximum number of steps in each episode (default: 3000)')
     parser.add_argument('--max_timesteps', default=int(1e8), type=int,
                     help='Number of total timesteps (default: 1e8)')
@@ -79,7 +80,10 @@ if __name__ == "__main__":
     print("-----------------------------------------")
 
     # Make OpenAI Gym environment:
-    env = gym.make(args.env_id)
+    if args.wrapper_id == "Sim2RealWrapper":
+        env = Sim2RealWrapper()
+    else:
+        env = gym.make(args.env_id)
 
     # Set seed for random number generators:
     if args.seed:
@@ -198,7 +202,7 @@ if __name__ == "__main__":
         # Episode termination:
         if episode_timesteps == args.max_steps:
             done = True
-            if (abs(eX) <= 0.01).all(): # problem is solved!
+            if (abs(eX) <= 0.007).all(): # problem is solved!
                 policy.save(f"./models/{file_name+ '_solved_' + str(total_timesteps)}") # save solved model
         done_bool = float(done) if episode_timesteps < args.max_steps else 0
 

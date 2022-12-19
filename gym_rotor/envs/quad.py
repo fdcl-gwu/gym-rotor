@@ -26,13 +26,13 @@ class QuadEnv(gym.Env):
         # Force and Moment:
         self.f = self.m * self.g # magnitude of total thrust to overcome  
                                  # gravity and mass (No air resistance), [N]
-        self.f_each = self.m * self.g / 4.0 # thrust magnitude of each motor, [N]
+        self.f_hover = self.m * self.g / 4.0 # thrust magnitude of each motor, [N]
         self.min_force = 0.5 # minimum thrust of each motor, [N]
-        self.max_force = self.c_tw * self.f_each # maximum thrust of each motor, [N]
-        self.f1 = self.f_each # thrust of each 1st motor, [N]
-        self.f2 = self.f_each # thrust of each 2nd motor, [N]
-        self.f3 = self.f_each # thrust of each 3rd motor, [N]
-        self.f4 = self.f_each # thrust of each 4th motor, [N]
+        self.max_force = self.c_tw * self.f_hover # maximum thrust of each motor, [N]
+        self.f1 = self.f_hover # thrust of each 1st motor, [N]
+        self.f2 = self.f_hover # thrust of each 2nd motor, [N]
+        self.f3 = self.f_hover # thrust of each 3rd motor, [N]
+        self.f4 = self.f_hover # thrust of each 4th motor, [N]
         self.M  = np.zeros(3) # magnitude of moment on quadrotor, [Nm]
 
         self.fM = np.zeros((4, 1)) # Force-moment vector
@@ -47,6 +47,7 @@ class QuadEnv(gym.Env):
         self.scale_act = self.max_force-self.avrg_act # actor scaling
 
         # Simulation parameters:
+        self.total_iter = 0 # num of total timesteps
         self.freq = 200 # frequency [Hz]
         self.dt = 1./self.freq # discrete timestep, t(2) - t(1), [sec]
         self.ode_integrator = "solve_ivp" # or "euler", ODE solvers
@@ -185,14 +186,14 @@ class QuadEnv(gym.Env):
         v_norm = np.array([self.state[3], self.state[4], self.state[5]]) / self.v_lim # [m/s]
         W_norm = np.array([self.state[15], self.state[16], self.state[17]]) / self.W_lim # [rad/s]
         self.state = np.concatenate((x_norm, v_norm, R_vec, W_norm), axis=0)
-        self.b1d = rot_b1d(x_norm)   
+        #self.b1d = rot_b1d(x_norm)   
 
         # Reset forces & moments:
         self.f  = self.m * self.g
-        self.f1 = self.f_each
-        self.f2 = self.f_each
-        self.f3 = self.f_each
-        self.f4 = self.f_each
+        self.f1 = self.f_hover
+        self.f2 = self.f_hover
+        self.f3 = self.f_hover
+        self.f4 = self.f_hover
         self.M  = np.zeros(3)
 
         return np.array(self.state)
@@ -308,7 +309,7 @@ class QuadEnv(gym.Env):
                - C_V * linalg.norm(eV, 2) \
                - C_W * linalg.norm(W, 2) \
                - C_Ad * (abs(prev_action - action)).sum() \
-               - C_Am * (abs(action - self.f_each)).sum()
+               - C_Am * (abs(action - self.f_hover)).sum()
                #C_X*max(0, (1.0-abs(eX)[0]) + (1.0-abs(eX)[1]) + (1.0-abs(eX)[2]))
         reward = np.interp(reward, [-C_X, C_X], [0.0, 1.0]) # normalized into [0,1]
         '''
@@ -399,20 +400,6 @@ class QuadEnv(gym.Env):
             self.init_R_error = 3 * self.D2R # 3 deg
             self.init_W_error = self.W_lim*0.01 # 1%; initial ang vel error, [rad/s]
 
-
-    def set_random_parameters(self):
-        # Quadrotor parameters:
-        self.m  = uniform(size=1, low=1.7, high=1.9).max() # 1.85; mass of quad, [kg]
-        self.d  = uniform(size=1, low=0.22, high=0.24).max() # 0.23; arm length, [m]
-        self.J1 = uniform(size=1, low=0.017, high=0.023).max() 
-        self.J2 = uniform(size=1, low=0.017, high=0.023).max() 
-        self.J3 = uniform(size=1, low=0.037, high=0.043).max() 
-        self.J  = np.diag([self.J1, self.J2, self.J3]) # [0.02,0.02,0.04]; inertia matrix of quad, [kg m2]
-        self.c_tf = uniform(size=1, low=0.01, high=0.015).max() # 0.0135; torque-to-thrust coefficients
-        self.c_tw = uniform(size=1, low=1.6, high=2.0).max() # 1.8; thrust-to-weight coefficients
-        
-        # Motor and Sensor noise: thrust_noise_ratio, sigma, cutoff_freq
-        
 
     def render(self, mode='human', close=False):
         from vpython import box, sphere, color, vector, rate, canvas, cylinder, ring, arrow, scene, textures
