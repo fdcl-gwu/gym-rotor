@@ -28,11 +28,71 @@ def get_current_b1(R):
     return np.array([np.cos(theta), np.sin(theta), 0.0])
 
 
+# Decomposing state vectors
+def state_decomposition(state):
+    x = np.array([state[0], state[1], state[2]]) # [m]
+    v = np.array([state[3], state[4], state[5]]) # [m/s]
+    W = np.array([state[15], state[16], state[17]]) # [rad/s]
+
+    R_vec = np.array([state[6],  state[7],  state[8],
+                      state[9],  state[10], state[11],
+                      state[12], state[13], state[14]])
+    R = R_vec.reshape(3, 3, order='F')
+    # Re-orthonormalize:
+    if not isRotationMatrix(R):
+        ''' https://www.codefull.net/2017/07/orthonormalize-a-rotation-matrix/ '''
+        u, s, vh = linalg.svd(R, full_matrices=False)
+        R = u @ vh
+        R_vec = R.reshape(9, 1, order='F').flatten()
+
+    return x, v, R, W
+
+
+# Normalization state vectors: [max, min] -> [-1, 1]
+def state_normalization(state, x_lim, v_lim, W_lim):
+    x_norm = np.array([state[0], state[1], state[2]]) / x_lim 
+    v_norm = np.array([state[3], state[4], state[5]]) / v_lim 
+    W_norm = np.array([state[15], state[16], state[17]]) / W_lim
+
+    R_vec = np.array([state[6],  state[7],  state[8],
+                      state[9],  state[10], state[11],
+                      state[12], state[13], state[14]])
+    R = R_vec.reshape(3, 3, order='F')
+    # Re-orthonormalize:
+    if not isRotationMatrix(R):
+        ''' https://www.codefull.net/2017/07/orthonormalize-a-rotation-matrix/ '''
+        u, s, vh = linalg.svd(R, full_matrices=False)
+        R = u @ vh
+        R_vec = R.reshape(9, 1, order='F').flatten()
+
+    return x_norm, v_norm, R, W_norm
+
+
+# De-normalization state vectors: [-1, 1] -> [max, min]
+def state_de_normalization(state, x_lim, v_lim, W_lim):
+    x = np.array([state[0], state[1], state[2]]) * x_lim # [m]
+    v = np.array([state[3], state[4], state[5]]) * v_lim # [m/s]
+    W = np.array([state[15], state[16], state[17]]) * W_lim # [rad/s]
+
+    R_vec = np.array([state[6],  state[7],  state[8],
+                      state[9],  state[10], state[11],
+                      state[12], state[13], state[14]])
+    R = R_vec.reshape(3, 3, order='F')
+    # Re-orthonormalize:
+    if not isRotationMatrix(R):
+        ''' https://www.codefull.net/2017/07/orthonormalize-a-rotation-matrix/ '''
+        u, s, vh = linalg.svd(R, full_matrices=False)
+        R = u @ vh
+        R_vec = R.reshape(9, 1, order='F').flatten()
+
+    return x, v, R, W
+
 # Rotation on e3 axis
 def R_e3(theta):
     return np.array([[cos(theta), -sin(theta), 0.0],
                      [sin(theta),  cos(theta), 0.0],
                      [       0.0,         0.0, 1.0]])
+
 
 # Equivariant b1d
 def rot_b1d(x):
@@ -46,6 +106,7 @@ def rot_b1d(x):
     b1d_equiv = R_e3(-theta_x) @ b1d
 
     return b1d_equiv
+
 
 def angle_of_vectors(vec1, vec2):
     unit_vector_1 = vec1 / linalg.norm(vec1)

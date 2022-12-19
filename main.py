@@ -34,11 +34,11 @@ if __name__ == "__main__":
     # Args of Environment:
     parser.add_argument('--env_id', default="Quad-v0",
                     help='Name of OpenAI Gym environment (default: Quad-v0)')
-    parser.add_argument('--wrapper_id', default="Sim2RealWrapper",
+    parser.add_argument('--wrapper_id', default="",
                     help='Name of wrapper: Sim2RealWrapper')    
     parser.add_argument('--aux_id', default="",
                     help='Name of auxiliary technique: EquivWrapper, CtrlSatWrapper')    
-    parser.add_argument('--max_steps', default=10000, type=int,
+    parser.add_argument('--max_steps', default=2000, type=int,
                     help='Maximum number of steps in each episode (default: 3000)')
     parser.add_argument('--max_timesteps', default=int(1e8), type=int,
                     help='Number of total timesteps (default: 1e8)')

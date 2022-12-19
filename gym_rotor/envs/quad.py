@@ -181,10 +181,8 @@ class QuadEnv(gym.Env):
         R_vec = R.reshape(9, 1, order='F').flatten()
         # self.b1d = get_current_b1(R) # desired heading direction     
 
-        # Normalization
-        x_norm = np.array([self.state[0], self.state[1], self.state[2]]) / self.x_lim # [m]
-        v_norm = np.array([self.state[3], self.state[4], self.state[5]]) / self.v_lim # [m/s]
-        W_norm = np.array([self.state[15], self.state[16], self.state[17]]) / self.W_lim # [rad/s]
+        # Normalization: [max, min] -> [-1, 1]
+        x_norm, v_norm, R, W_norm = state_normalization(self.state, self.x_lim, self.v_lim, self.W_lim)
         self.state = np.concatenate((x_norm, v_norm, R_vec, W_norm), axis=0)
         #self.b1d = rot_b1d(x_norm)   
 
@@ -220,25 +218,10 @@ class QuadEnv(gym.Env):
 
 
     def observation_wrapper(self, state):
-        x = np.array([state[0], state[1], state[2]]) # [m]
-        v = np.array([state[3], state[4], state[5]]) # [m/s]
-        R_vec = np.array([state[6],  state[7],  state[8],
-                          state[9],  state[10], state[11],
-                          state[12], state[13], state[14]])
-        W = np.array([state[15], state[16], state[17]]) # [rad/s]
 
-        # Re-orthonormalize:
-        R = R_vec.reshape(3, 3, order='F')
-        if not isRotationMatrix(R):
-            ''' https://www.codefull.net/2017/07/orthonormalize-a-rotation-matrix/ '''
-            u, s, vh = linalg.svd(R, full_matrices=False)
-            R = u @ vh
-            R_vec = R.reshape(9, 1, order='F').flatten()
-
-        # De-normalization:
-        x *= self.x_lim # [m]
-        v *= self.v_lim # [m/s]
-        W *= self.W_lim # [rad/s]
+        # De-normalization: [-1, 1] -> [max, min]
+        x, v, R, W = state_de_normalization(state, self.x_lim, self.v_lim, self.W_lim)
+        R_vec = R.reshape(9, 1, order='F').flatten()
         state = np.concatenate((x, v, R_vec, W), axis=0)
 
         # Solve ODEs:
@@ -258,45 +241,19 @@ class QuadEnv(gym.Env):
             sol = solve_ivp(self.EoM, [0, self.dt], state, method='DOP853')
             self.state = sol.y[:,-1]
 
-        # Normalization:
-        x = np.array([self.state[0], self.state[1], self.state[2]]) / self.x_lim
-        v = np.array([self.state[3], self.state[4], self.state[5]]) / self.v_lim
-        R_vec = np.array([self.state[6],  self.state[7],  self.state[8],
-                          self.state[9],  self.state[10], self.state[11],
-                          self.state[12], self.state[13], self.state[14]])
-        W = np.array([self.state[15], self.state[16], self.state[17]]) / self.W_lim
-
-        # Re-orthonormalize:
-        R = R_vec.reshape(3, 3, order='F')
-        if not isRotationMatrix(R):
-            ''' https://www.codefull.net/2017/07/orthonormalize-a-rotation-matrix/ '''
-            u, s, vh = linalg.svd(R, full_matrices=False)
-            R = u @ vh
-            R_vec = R.reshape(9, 1, order='F').flatten()
-
-        self.state = np.concatenate((x, v, R_vec, W), axis=0)
+        # Normalization: [max, min] -> [-1, 1]
+        x_norm, v_norm, R, W_norm = state_normalization(self.state, self.x_lim, self.v_lim, self.W_lim)
+        R_vec = R.reshape(9, 1, order='F').flatten()
+        self.state = np.concatenate((x_norm, v_norm, R_vec, W_norm), axis=0)
 
         return self.state
     
 
     def reward_wrapper(self, obs, action, prev_action):
-        x = np.array([obs[0], obs[1], obs[2]]) # [m]
-        v = np.array([obs[3], obs[4], obs[5]]) # [m/s]
-        R_vec = np.array([obs[6],  obs[7],  obs[8],
-                          obs[9],  obs[10], obs[11],
-                          obs[12], obs[13], obs[14]])
-        R = R_vec.reshape(3, 3, order='F')
-        W = np.array([obs[15], obs[16], obs[17]]) # [rad/s]
+        # Decomposing state vectors
+        x, v, R, W = state_decomposition(obs)
 
-        eX = x - self.xd     # position error
-        eV = v - self.xd_dot # velocity error
-
-        # New reward
-        prev_action = (
-            self.scale_act * prev_action + self.avrg_act
-            ).clip(self.min_force, self.max_force)
-
-        # Reward function
+        # Reward function coefficients:
         C_X = self.C_X # pos coef.
         C_V = self.C_V # vel coef.
         C_W = self.C_W # ang_vel coef.
@@ -304,19 +261,16 @@ class QuadEnv(gym.Env):
         C_Ad = self.C_Ad # for smooth control
         C_Am = self.C_Am # for smooth control
 
-        '''
-        reward = C_X*max(0, 1.0 - linalg.norm(eX, 2)) \
-               - C_V * linalg.norm(eV, 2) \
-               - C_W * linalg.norm(W, 2) \
-               - C_Ad * (abs(prev_action - action)).sum() \
-               - C_Am * (abs(action - self.f_hover)).sum()
-               #C_X*max(0, (1.0-abs(eX)[0]) + (1.0-abs(eX)[1]) + (1.0-abs(eX)[2]))
-        reward = np.interp(reward, [-C_X, C_X], [0.0, 1.0]) # normalized into [0,1]
-        '''
+        # Previous actions:
+        prev_action = (
+            self.scale_act * prev_action + self.avrg_act
+            ).clip(self.min_force, self.max_force)
 
+        # Errors:
+        eX = x - self.xd     # position error
+        eV = v - self.xd_dot # velocity error
         eR = angle_of_vectors(get_current_b1(R), self.b1d) # [rad], heading error
         eR = np.interp(eR, [0., pi], [0., 1.0]) # normalized into [0,1]
-
         # To avoid `-log(0) = inf`
         eps = 1e-10
         eX = np.where(abs(eX)<=eps, eX*eps, eX)
@@ -337,20 +291,10 @@ class QuadEnv(gym.Env):
 
 
     def done_wrapper(self, obs):
-        x = np.array([obs[0], obs[1], obs[2]]) # [m]
-        v = np.array([obs[3], obs[4], obs[5]]) # [m/s]
-        R_vec = np.array([obs[6],  obs[7],  obs[8],
-                          obs[9],  obs[10], obs[11],
-                          obs[12], obs[13], obs[14]])
-        R = R_vec.reshape(3, 3, order='F')
-        W = np.array([obs[15], obs[16], obs[17]]) # [rad/s]
+        # Decomposing state vectors
+        x, v, R, W = state_decomposition(obs)
 
         # Convert rotation matrix to Euler angles:
-        if not isRotationMatrix(R): # Re-orthonormalize:
-            ''' https://www.codefull.net/2017/07/orthonormalize-a-rotation-matrix/ '''
-            u, s, vh = linalg.svd(R, full_matrices=False)
-            R = u @ vh
-            R_vec = R.reshape(9, 1, order='F').flatten()
         eulerAngles = rotationMatrixToEulerAngles(R) * self.R2D
         
         done = False
@@ -365,15 +309,10 @@ class QuadEnv(gym.Env):
         return done
 
 
+    # https://youtu.be/iS5JFuopQsA
     def EoM(self, t, state):
-        # https://youtu.be/iS5JFuopQsA
-        x = np.array([state[0], state[1], state[2]]) # [m]
-        v = np.array([state[3], state[4], state[5]]) # [m/s]
-        R_vec = np.array([state[6], state[7], state[8],
-                          state[9], state[10], state[11],
-                          state[12], state[13], state[14]])
-        R = R_vec.reshape(3, 3, order='F')
-        W = np.array([state[15], state[16], state[17]]) # [rad/s]
+        # Decomposing state vectors
+        x, v, R, W = state_decomposition(state)
 
         # Equations of motion of the quadrotor UAV
         x_dot = v
@@ -405,15 +344,12 @@ class QuadEnv(gym.Env):
         from vpython import box, sphere, color, vector, rate, canvas, cylinder, ring, arrow, scene, textures
 
         # Rendering state:
-        state_vis = (self.state).flatten()
+        state_vis = np.copy(self.state)
 
-        x = np.array([state_vis[0], state_vis[1], state_vis[2]]) # [m]
-        v = np.array([state_vis[3], state_vis[4], state_vis[5]]) # [m/s]
-        R_vec = np.array([state_vis[6], state_vis[7], state_vis[8],
-                          state_vis[9], state_vis[10], state_vis[11],
-                          state_vis[12], state_vis[13], state_vis[14]])
-        W = np.array([state_vis[15], state_vis[16], state_vis[17]]) # [rad/s]
+        # De-normalization state vectors
+        x, v, R, W = state_de_normalization(state_vis, self.x_lim, self.v_lim, self.W_lim)
 
+        # Quadrotor and goal positions:
         quad_pos = x # [m]
         cmd_pos  = self.xd # [m]
 
