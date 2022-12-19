@@ -5,7 +5,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-larger_net = False
 
 class Actor(nn.Module):
     def __init__(self, state_dim, action_dim, hidden_dim, \
@@ -13,15 +12,9 @@ class Actor(nn.Module):
         super(Actor, self).__init__()
 
         # Fully-Connected (FC) layers
-        if larger_net:
-            self.fc1 = nn.Linear(state_dim,  hidden_dim)
-            self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-            self.fc3 = nn.Linear(hidden_dim, hidden_dim)
-            self.fc4 = nn.Linear(hidden_dim, action_dim)
-        else:
-            self.fc1 = nn.Linear(state_dim,  hidden_dim)
-            self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-            self.fc3 = nn.Linear(hidden_dim, action_dim)        
+        self.fc1 = nn.Linear(state_dim,  hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc3 = nn.Linear(hidden_dim, action_dim)        
 
         self.min_act = min_act
         self.max_act = max_act
@@ -30,20 +23,13 @@ class Actor(nn.Module):
         
 
     def forward(self, state):
-        if larger_net:
-            action = F.relu(self.fc1(state))
-            action = F.relu(self.fc2(action))
-            action = F.relu(self.fc3(action))
-            action = torch.tanh(self.fc4(action))
-        else:
-            action = F.relu(self.fc1(state))
-            action = F.relu(self.fc2(action))
-            action = torch.tanh(self.fc3(action))
+        action = F.relu(self.fc1(state))
+        action = F.relu(self.fc2(action))
         '''
         # Linear scale, [-1, 1] -> [min_act, max_act] 
         return self.scale_act * torch.tanh(self.fc3(action)) + self.avrg_act
         '''
-        return action
+        return torch.tanh(self.fc3(action))
 
 
 class Critic(nn.Module):
@@ -52,61 +38,32 @@ class Critic(nn.Module):
         """
         Clipped Double-Q Learning:
         """
+        # Q1 architecture
+        self.fc1 = nn.Linear(state_dim + action_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc3 = nn.Linear(hidden_dim, 1)
 
-        if larger_net:
-            self.fc1 = nn.Linear(state_dim + action_dim, hidden_dim)
-            self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-            self.fc3 = nn.Linear(hidden_dim, hidden_dim)
-            self.fc4 = nn.Linear(hidden_dim, 1)
-
-            self.fc5 = nn.Linear(state_dim + action_dim, hidden_dim)
-            self.fc6 = nn.Linear(hidden_dim, hidden_dim)
-            self.fc7 = nn.Linear(hidden_dim, hidden_dim)
-            self.fc8 = nn.Linear(hidden_dim, 1)
-        else:
-            # Q1 architecture
-            self.fc1 = nn.Linear(state_dim + action_dim, hidden_dim)
-            self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-            self.fc3 = nn.Linear(hidden_dim, 1)
-
-            # Q2 architecture
-            self.fc4 = nn.Linear(state_dim + action_dim, hidden_dim)
-            self.fc5 = nn.Linear(hidden_dim, hidden_dim)
-            self.fc6 = nn.Linear(hidden_dim, 1)
+        # Q2 architecture
+        self.fc4 = nn.Linear(state_dim + action_dim, hidden_dim)
+        self.fc5 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc6 = nn.Linear(hidden_dim, 1)
 
     def forward(self, state, action):
-        if larger_net:
-            q1 = F.relu(self.fc1(torch.cat([state, action], 1)))
-            q1 = F.relu(self.fc2(q1))
-            q1 = F.relu(self.fc3(q1))
-            q1 = self.fc4(q1)
+        q1 = F.relu(self.fc1(torch.cat([state, action], 1)))
+        q1 = F.relu(self.fc2(q1))
+        q1 = self.fc3(q1)
 
-            q2 = F.relu(self.fc5(torch.cat([state, action], 1)))
-            q2 = F.relu(self.fc6(q2))
-            q2 = F.relu(self.fc7(q2))
-            q2 = self.fc8(q2)
-        else:
-            q1 = F.relu(self.fc1(torch.cat([state, action], 1)))
-            q1 = F.relu(self.fc2(q1))
-            q1 = self.fc3(q1)
-
-            q2 = F.relu(self.fc4(torch.cat([state, action], 1)))
-            q2 = F.relu(self.fc5(q2))
-            q2 = self.fc6(q2)
+        q2 = F.relu(self.fc4(torch.cat([state, action], 1)))
+        q2 = F.relu(self.fc5(q2))
+        q2 = self.fc6(q2)
 
         return q1, q2
 
 
     def Q1(self, state, action):
-        if larger_net:
-            q1 = F.relu(self.fc1(torch.cat([state, action], 1)))
-            q1 = F.relu(self.fc2(q1))
-            q1 = F.relu(self.fc3(q1))
-            q1 = self.fc4(q1)
-        else:
-            q1 = F.relu(self.fc1(torch.cat([state, action], 1)))
-            q1 = F.relu(self.fc2(q1))
-            q1 = self.fc3(q1)        
+        q1 = F.relu(self.fc1(torch.cat([state, action], 1)))
+        q1 = F.relu(self.fc2(q1))
+        q1 = self.fc3(q1)        
 
         return q1
 
