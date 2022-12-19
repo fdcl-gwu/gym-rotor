@@ -42,7 +42,7 @@ if __name__ == "__main__":
                     help='Maximum number of steps in each episode (default: 3000)')
     parser.add_argument('--max_timesteps', default=int(1e8), type=int,
                     help='Number of total timesteps (default: 1e8)')
-    parser.add_argument('--render', default=True, type=bool,
+    parser.add_argument('--render', default=False, type=bool,
                     help='Simulation visualization (default: False)')
     # Args of Agents:
     parser.add_argument("--policy", default="TD3_CAPS",

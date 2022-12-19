@@ -9,64 +9,43 @@ from transforms3d.euler import euler2mat, mat2euler
 from gym_rotor.envs.quad_utils import *
 from gym_rotor.envs.quad import QuadEnv
 
-import time
-
-
 class Sim2RealWrapper(QuadEnv):
 
     def __init__(self): 
         super().__init__()
         self.delayed_action = np.zeros(4)
 
-
     def reset(self, env_type='train'):
+        # Domain randomization:
+        self.set_random_parameters()
+
         # Reset states & Normalization:
-        self.state = np.array(np.zeros(18))
-        self.state[6:15] = np.eye(3).reshape(1, 9, order='F')
+        state = np.array(np.zeros(18))
+        state[6:15] = np.eye(3).reshape(1, 9, order='F')
 
         # Initial state error:
         self.sample_init_error(env_type)
 
-        # Domain randomization:
-        self.set_random_parameters()
-
         # x, position:
-        self.state[0] = uniform(size=1, low=-self.init_x_error, high=self.init_x_error) 
-        self.state[1] = uniform(size=1, low=-self.init_x_error, high=self.init_x_error) 
-        self.state[2] = uniform(size=1, low=-self.init_x_error, high=self.init_x_error)
+        state[0] = uniform(size=1, low=-self.init_x_error, high=self.init_x_error) 
+        state[1] = uniform(size=1, low=-self.init_x_error, high=self.init_x_error) 
+        state[2] = uniform(size=1, low=-self.init_x_error, high=self.init_x_error)
 
         # v, velocity:
-        self.state[3] = uniform(size=1, low=-self.init_v_error, high=self.init_v_error) 
-        self.state[4] = uniform(size=1, low=-self.init_v_error, high=self.init_v_error) 
-        self.state[5] = uniform(size=1, low=-self.init_v_error, high=self.init_v_error)
+        state[3] = uniform(size=1, low=-self.init_v_error, high=self.init_v_error) 
+        state[4] = uniform(size=1, low=-self.init_v_error, high=self.init_v_error) 
+        state[5] = uniform(size=1, low=-self.init_v_error, high=self.init_v_error)
 
         # W, angular velocity:
-        self.state[15] = uniform(size=1, low=-self.init_W_error, high=self.init_W_error) 
-        self.state[16] = uniform(size=1, low=-self.init_W_error, high=self.init_W_error) 
-        self.state[17] = uniform(size=1, low=-self.init_W_error, high=self.init_W_error) 
+        state[15] = uniform(size=1, low=-self.init_W_error, high=self.init_W_error) 
+        state[16] = uniform(size=1, low=-self.init_W_error, high=self.init_W_error) 
+        state[17] = uniform(size=1, low=-self.init_W_error, high=self.init_W_error) 
 
         # R, attitude:
         pitch = uniform(size=1, low=-self.init_R_error, high=self.init_R_error)
         roll  = uniform(size=1, low=-self.init_R_error, high=self.init_R_error)
         yaw   = uniform(size=1, low=-pi, high=pi) 
         R = euler2mat(roll, pitch, yaw) 
-        """
-        # NED; https://www.wilselby.com/research/arducopter/modeling/
-        self.state[6]  = cos(theta)*cos(psi)
-        self.state[7]  = cos(theta)*sin(psi) 
-        self.state[8]  = -sin(theta) 
-        self.state[9]  = sin(phi)*sin(theta)*cos(psi) - cos(phi)*sin(psi)
-        self.state[10] = sin(phi)*sin(theta)*sin(psi) + cos(phi)*cos(psi)
-        self.state[11] = sin(phi)*cos(theta)
-        self.state[12] = cos(phi)*sin(theta)*cos(psi) + sin(phi)*sin(psi)
-        self.state[13] = cos(phi)*sin(theta)*sin(psi) - sin(phi)*cos(psi)
-        self.state[14] = cos(phi)*cos(theta)
-        R_vec = np.array([self.state[6],  self.state[7],  self.state[8],
-                          self.state[9],  self.state[10], self.state[11],
-                          self.state[12], self.state[13], self.state[14]])
-        R = R_vec.reshape(3, 3, order='F')
-        #R = rand_uniform_rot3d()
-        """
         # Re-orthonormalize:
         if not isRotationMatrix(R):
             ''' https://www.codefull.net/2017/07/orthonormalize-a-rotation-matrix/ '''
@@ -75,10 +54,8 @@ class Sim2RealWrapper(QuadEnv):
         R_vec = R.reshape(9, 1, order='F').flatten()
         # self.b1d = get_current_b1(R) # desired heading direction     
 
-        # Normalization
-        x_norm = np.array([self.state[0], self.state[1], self.state[2]]) / self.x_lim # [m]
-        v_norm = np.array([self.state[3], self.state[4], self.state[5]]) / self.v_lim # [m/s]
-        W_norm = np.array([self.state[15], self.state[16], self.state[17]]) / self.W_lim # [rad/s]
+        # Normalization: [max, min] -> [-1, 1]
+        x_norm, v_norm, _, W_norm = state_normalization(state, self.x_lim, self.v_lim, self.W_lim)
         self.state = np.concatenate((x_norm, v_norm, R_vec, W_norm), axis=0)
         #self.b1d = rot_b1d(x_norm)   
 
