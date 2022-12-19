@@ -23,15 +23,19 @@ def eval_agent(policy, avrg_act, args):
     episode_eval = 5
     avg_reward = 0.0
     for _ in range(episode_eval):
+
+        # State:
+        state, done = eval_env.reset(env_type='eval'), False
+
+        # Decomposing state vectors:
+        x, v, R, W = state_decomposition(state)
+
         # Goal state:
         xd = np.array([0.0, 0.0, 0.0])/eval_env.x_lim 
         xd_dot = np.array([0.0, 0.0, 0.0])/eval_env.v_lim 
         Wd = np.array([0.0, 0.0, 0.0])/eval_env.W_lim 
         b1d = np.array([1.0, 0.0, 0.0]) # desired heading direction
-        # b1d = get_current_b1(R)
-
-        # State:
-        state, done = eval_env.reset(env_type='eval'), False
+        # b1d = get_current_b1(R) # desired heading direction
 
         episode_timesteps = 0
         action = avrg_act * np.ones(4) 
