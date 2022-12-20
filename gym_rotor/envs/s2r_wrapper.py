@@ -16,15 +16,15 @@ class Sim2RealWrapper(QuadEnv):
         self.delayed_action = np.zeros(4)
 
     def reset(self, env_type='train'):
-        # Domain randomization:
-        self.set_random_parameters()
-
         # Reset states & Normalization:
         state = np.array(np.zeros(18))
         state[6:15] = np.eye(3).reshape(1, 9, order='F')
 
         # Initial state error:
         self.sample_init_error(env_type)
+
+        # Domain randomization:
+        self.set_random_parameters(env_type)
 
         # x, position:
         state[0] = uniform(size=1, low=-self.init_x_error, high=self.init_x_error) 
@@ -95,26 +95,34 @@ class Sim2RealWrapper(QuadEnv):
         
 
 
-    def set_random_parameters(self):
-        # Quadrotor parameters:
-        self.m  = uniform(size=1, low=1.7, high=1.9).max() # 1.85; mass of quad, [kg]
-        self.d  = uniform(size=1, low=0.22, high=0.24).max() # 0.23; arm length, [m]
-        self.J1 = uniform(size=1, low=0.015, high=0.025).max() # 0.02
-        self.J2 = self.J1 
-        self.J3 = uniform(size=1, low=0.035, high=0.045).max() # 0.04
-        self.J  = np.diag([self.J1, self.J2, self.J3]) # [0.02,0.02,0.04]; inertia matrix of quad, [kg m2]
-        self.c_tf = uniform(size=1, low=0.01, high=0.015).max() # 0.0135; torque-to-thrust coefficients
-        self.c_tw = uniform(size=1, low=1.5, high=2.0).max() # 1.8; thrust-to-weight coefficients
-        
-        # Frequency of “Delayed” action updates
-        '''
-        Example) If `self.freq = 300 # frequency [Hz]`,
-        self.action_update_freq = 1    -> 300 Hz
-        self.action_update_freq = 1.5  -> 200 Hz
-        self.action_update_freq = 2    -> 150 Hz
-        self.action_update_freq = 3    -> 100 Hz
-        '''
-        self.action_update_freq = 1
-        # self.action_update_freq = uniform(size=1, low=1, high=2).max() # 100 Hz to 200 Hz
-
-        # Motor and Sensor noise: thrust_noise_ratio, sigma, cutoff_freq
+    def set_random_parameters(self, env_type='train'):
+        if env_type == 'train':
+            # Quadrotor parameters:
+            self.m  = uniform(size=1, low=1.7, high=1.9).max() # 1.85; mass of quad, [kg]
+            self.d  = uniform(size=1, low=0.22, high=0.24).max() # 0.23; arm length, [m]
+            self.J1 = uniform(size=1, low=0.015, high=0.025).max() # 0.02
+            self.J2 = self.J1 
+            self.J3 = uniform(size=1, low=0.035, high=0.045).max() # 0.04
+            self.J  = np.diag([self.J1, self.J2, self.J3]) # [0.02,0.02,0.04]; inertia matrix of quad, [kg m2]
+            self.c_tf = uniform(size=1, low=0.01, high=0.015).max() # 0.0135; torque-to-thrust coefficients
+            self.c_tw = uniform(size=1, low=1.5, high=2.0).max() # 1.8; thrust-to-weight coefficients
+            
+            # Frequency of “Delayed” action updates
+            '''
+            Example) If `self.freq = 300 # frequency [Hz]`,
+            self.action_update_freq = 1    -> 300 Hz
+            self.action_update_freq = 1.5  -> 200 Hz
+            self.action_update_freq = 2    -> 150 Hz
+            self.action_update_freq = 3    -> 100 Hz
+            '''
+            self.action_update_freq = 1
+            # self.action_update_freq = uniform(size=1, low=1, high=2).max() # 100 Hz to 200 Hz
+            # Motor and Sensor noise: thrust_noise_ratio, sigma, cutoff_freq
+            
+        elif env_type == 'eval':
+            # Quadrotor parameters:
+            self.m = 1.85 # mass of quad, [kg]
+            self.d = 0.23 # arm length, [m]
+            self.J = np.diag([0.02, 0.02, 0.04]) # inertia matrix of quad, [kg m2]
+            self.c_tf = 0.0135 # torque-to-thrust coefficients
+            self.c_tw = 1.8 # thrust-to-weight coefficients

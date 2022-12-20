@@ -23,7 +23,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Reinforcement Learning for Quadrotor UAV')
     parser.add_argument("--save_model", default=True, action="store_true",
                     help='Save models and optimizer parameters (default: True)')
-    parser.add_argument("--load_model", default=False, type=bool,
+    parser.add_argument("--test_model", default=False, type=bool,
                     help='Load and test trained models (default: False)')   
     parser.add_argument("--save_log", default=False, type=bool,
                     help='Load trained models and save log(default: False)')      
@@ -131,12 +131,12 @@ if __name__ == "__main__":
 
     # Load trained models and optimizer parameters:
     file_name = f"{args.policy}_{args.env_id}"
-    if args.load_model == True:
+    if args.test_model == True:
         policy.load(f"./models/{file_name + '_best'}") # '_solved' or '_best'
 
     # Evaluate policy
     eval_policy = [eval_agent(policy, avrg_act, args)]
-    if args.load_model == True:
+    if args.test_model == True:
         sys.exit("The trained model has been test!")
 
     # Save models and optimizer parameters:

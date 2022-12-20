@@ -173,17 +173,20 @@ axs[0, 0].plot(t, b1d1, 'tab:red', linewidth=3, label='$b_{1d_1}$')
 axs[0, 0].plot(t, R11, linewidth=3, label='response')
 axs[0, 0].set_ylabel('$R_{11}$', size=fontsize)
 axs[0, 0].grid(True, color='white', linestyle='-', linewidth=1.0)
+axs[0, 0].legend(ncol=1, prop={'size': fontsize}, loc='best')
 # axs[0, 0].set_yticks(np.arange(0.97, 1.0, 0.01))
 
 axs[1, 0].plot(t, b1d2, 'tab:red', linewidth=3, label='$b_{1d_2}$')
 axs[1, 0].plot(t, R21, linewidth=3)
 axs[1, 0].set_ylabel('$R_{21}$', size=fontsize)
+axs[1, 0].legend(ncol=1, prop={'size': fontsize}, loc='best')
 # axs[1, 0].set_title('$R_{21}$')
 
 axs[2, 0].plot(t, b1d3, 'tab:red', linewidth=3, label='$b_{1d_3}$')
 axs[2, 0].plot(t, R31, linewidth=3)
 axs[2, 0].set_ylabel('$R_{31}$', size=fontsize)
 axs[2, 0].set_xlabel('Time [s]', size=fontsize)
+axs[2, 0].legend(ncol=1, prop={'size': fontsize}, loc='best')
 # axs[2, 0].set_title('$R_{31}$')
 # axs[2, 0].set_yticks(np.arange(-0.05, 0.08, 0.04))
 
@@ -220,7 +223,6 @@ for i in range(3):
     for j in range(3):
         axs[i, j].set_xlim([0., t[-1]])
         axs[i, j].grid(True, color='white', linestyle='-', linewidth=1.0)
-        axs[i, j].legend(ncol=1, prop={'size': fontsize}, loc='best')
         axs[i, j].locator_params(axis='y', nbins=4)
 for label in (axs[0, 0].get_xticklabels() + axs[0, 0].get_yticklabels()):
 	label.set_fontsize(fontsize)
