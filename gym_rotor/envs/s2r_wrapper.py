@@ -9,6 +9,7 @@ from transforms3d.euler import euler2mat, mat2euler
 from gym_rotor.envs.quad_utils import *
 from gym_rotor.envs.quad import QuadEnv
 
+
 class Sim2RealWrapper(QuadEnv):
 
     def __init__(self): 
@@ -61,15 +62,15 @@ class Sim2RealWrapper(QuadEnv):
 
         # Reset forces & moments:
         self.f  = self.m * self.g
-        self.f1 = self.f_hover
-        self.f2 = self.f_hover
-        self.f3 = self.f_hover
-        self.f4 = self.f_hover
+        self.f1 = self.hover_force
+        self.f2 = self.hover_force
+        self.f3 = self.hover_force
+        self.f4 = self.hover_force
         self.M  = np.zeros(3)
 
         return np.array(self.state)
 
-
+    """
     def action_wrapper(self, action):
         self.total_iter += 1
         if self.total_iter % self.action_update_freq == 0:
@@ -92,21 +93,37 @@ class Sim2RealWrapper(QuadEnv):
 
 
         return self.delayed_action
-        
-
+    """
 
     def set_random_parameters(self, env_type='train'):
+        # Nominal quadrotor parameters:
+        self.m = 1.85 # mass of quad, [kg]
+        self.d = 0.23 # arm length, [m]
+        J1, J2, J3 = 0.02, 0.02, 0.04
+        self.J = np.diag([J1, J2, J3]) # inertia matrix of quad, [kg m2]
+        self.c_tf = 0.0135 # torque-to-thrust coefficients
+        self.c_tw = 1.8 # thrust-to-weight coefficients
+
         if env_type == 'train':
+            uncertainty_range = 0.1 # *100 = [%]
             # Quadrotor parameters:
-            self.m  = uniform(size=1, low=1.7, high=1.9).max() # 1.85; mass of quad, [kg]
-            self.d  = uniform(size=1, low=0.22, high=0.24).max() # 0.23; arm length, [m]
-            self.J1 = uniform(size=1, low=0.015, high=0.025).max() # 0.02
-            self.J2 = self.J1 
-            self.J3 = uniform(size=1, low=0.035, high=0.045).max() # 0.04
-            self.J  = np.diag([self.J1, self.J2, self.J3]) # [0.02,0.02,0.04]; inertia matrix of quad, [kg m2]
-            self.c_tf = uniform(size=1, low=0.01, high=0.015).max() # 0.0135; torque-to-thrust coefficients
-            self.c_tw = uniform(size=1, low=1.5, high=2.0).max() # 1.8; thrust-to-weight coefficients
+            m_range = self.m * uncertainty_range
+            d_range = self.d * uncertainty_range
+            J1_range = J1 * uncertainty_range
+            J3_range = J3 * uncertainty_range
+            c_tf_range = self.c_tf * uncertainty_range
+            c_tw_range = self.c_tw * uncertainty_range
+
+            self.m = uniform(low=(self.m - m_range), high=(self.m + m_range)) # [kg]
+            self.d = uniform(low=(self.d - d_range), high=(self.d + d_range)) # [m]
+            J1 = uniform(low=(J1 - J1_range), high=(J1 + J1_range))
+            J2 = J1 
+            J3 = uniform(low=(J3 - J3_range), high=(J3 + J3_range))
+            self.J  = np.diag([J1, J2, J3]) # [kg m2]
+            self.c_tf = uniform(low=(self.c_tf - c_tf_range), high=(self.c_tf + c_tf_range))
+            self.c_tw = uniform(low=(self.c_tw - c_tw_range), high=(self.c_tw + c_tw_range))
             
+            """
             # Frequency of “Delayed” action updates
             '''
             Example) If `self.freq = 300 # frequency [Hz]`,
@@ -118,11 +135,20 @@ class Sim2RealWrapper(QuadEnv):
             self.action_update_freq = 1
             # self.action_update_freq = uniform(size=1, low=1, high=2).max() # 100 Hz to 200 Hz
             # Motor and Sensor noise: thrust_noise_ratio, sigma, cutoff_freq
-            
-        elif env_type == 'eval':
-            # Quadrotor parameters:
-            self.m = 1.85 # mass of quad, [kg]
-            self.d = 0.23 # arm length, [m]
-            self.J = np.diag([0.02, 0.02, 0.04]) # inertia matrix of quad, [kg m2]
-            self.c_tf = 0.0135 # torque-to-thrust coefficients
-            self.c_tw = 1.8 # thrust-to-weight coefficients
+            """
+
+        # Force and Moment:
+        self.f = self.m * self.g # magnitude of total thrust to overcome  
+                                    # gravity and mass (No air resistance), [N]
+        self.hover_force = self.m * self.g / 4.0 # thrust magnitude of each motor, [N]
+        self.max_force = self.c_tw * self.hover_force # maximum thrust of each motor, [N]
+        self.fM = np.zeros((4, 1)) # Force-moment vector
+        self.forces_to_fM = np.array([
+            [1.0, 1.0, 1.0, 1.0],
+            [0.0, -self.d, 0.0, self.d],
+            [self.d, 0.0, -self.d, 0.0],
+            [-self.c_tf, self.c_tf, -self.c_tf, self.c_tf]
+        ]) # Conversion matrix of forces to force-moment 
+        self.fM_to_forces = np.linalg.inv(self.forces_to_fM)
+        self.avrg_act = (self.min_force+self.max_force)/2.0 
+        self.scale_act = self.max_force-self.avrg_act # actor scaling

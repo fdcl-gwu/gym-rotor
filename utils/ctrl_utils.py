@@ -5,7 +5,7 @@ from math import cos, sin, pi
 def ctrl_sat(action, eX, min_act, max_act, env):
 
     # Normalized hovering thrust:
-    hover_force = np.interp(env.f_each, [env.min_force, env.max_force], [-1., 1.]) # normalized into [-1, 1]
+    hover_force = np.interp(env.hover_force, [env.min_force, env.max_force], [-1., 1.]) # normalized into [-1, 1]
 
     # Normalized position error:
     eX = linalg.norm(eX, 2)/env.x_lim # normalized into [-1, 1]

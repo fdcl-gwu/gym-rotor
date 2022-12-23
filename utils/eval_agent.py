@@ -6,13 +6,17 @@ from datetime import datetime
 
 import gym
 import gym_rotor
+from gym_rotor.envs.s2r_wrapper import Sim2RealWrapper
 from gym_rotor.envs.quad_utils import *
 from utils.ctrl_utils import *
 
 # Runs policy for n episodes and returns average reward.
-def eval_agent(policy, avrg_act, args):
+def eval_agent(policy, args, i_eval, file_name):
     # Make OpenAI Gym environment:
-    eval_env = gym.make(args.env_id)
+    if args.wrapper_id == "Sim2RealWrapper":
+        eval_env = Sim2RealWrapper()
+    else:
+        eval_env = gym.make(args.env_id)
 
     # Fixed seed is used for the eval environment.
     eval_env.seed(args.seed)
@@ -42,6 +46,8 @@ def eval_agent(policy, avrg_act, args):
 
         episode_timesteps = 0
         while not done:
+            episode_timesteps += 1
+
             if args.aux_id == "EquivWrapper":
                 state_equiv = rot_e3(state)
 
@@ -64,18 +70,17 @@ def eval_agent(policy, avrg_act, args):
             # Cumulative rewards:
             avg_reward += reward
 
-            episode_timesteps += 1
-
             # Save data:
             if args.save_log:
                 act_list.append(np.concatenate((action), axis=None))
                 obs_list.append(np.concatenate((state), axis=None))
                 cmd_list.append(np.concatenate((xd, xd_dot, b1d, Wd), axis=None))
 
+            # Episode termination:
             if episode_timesteps == args.max_steps:
                 done = True
 
-        # Save data
+        # Save data:
         if args.save_log:
             min_len = min(len(act_list), len(obs_list), len(cmd_list))
             log_data = np.column_stack((act_list[-min_len:], obs_list[-min_len:], cmd_list[-min_len:]))
@@ -85,10 +90,16 @@ def eval_agent(policy, avrg_act, args):
             fpath = os.path.join('./results', 'log_' + time_now + '.dat')
             np.savetxt(fpath, log_data, header=header, fmt='%.10f') 
 
+    # Average reward:
     avg_reward /= episode_eval
+
+    # Save solved model:
+    if (abs(eX) <= 0.005).all() and args.save_model == True: # Problem is solved!
+        policy.save(f"./models/{file_name+ '_solved_' + str(i_eval)}") 
 
     print("---------------------------------------")
     print(f"Evaluation over {episode_eval}, average reward: {avg_reward:.3f}, eX: {eX}")
     print("---------------------------------------")
+
 
     return avg_reward

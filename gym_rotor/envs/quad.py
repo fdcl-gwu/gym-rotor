@@ -26,13 +26,16 @@ class QuadEnv(gym.Env):
         # Force and Moment:
         self.f = self.m * self.g # magnitude of total thrust to overcome  
                                  # gravity and mass (No air resistance), [N]
-        self.f_hover = self.m * self.g / 4.0 # thrust magnitude of each motor, [N]
+        self.hover_force = self.m * self.g / 4.0 # thrust magnitude of each motor, [N]
         self.min_force = 0.5 # minimum thrust of each motor, [N]
-        self.max_force = self.c_tw * self.f_hover # maximum thrust of each motor, [N]
-        self.f1 = self.f_hover # thrust of each 1st motor, [N]
-        self.f2 = self.f_hover # thrust of each 2nd motor, [N]
-        self.f3 = self.f_hover # thrust of each 3rd motor, [N]
-        self.f4 = self.f_hover # thrust of each 4th motor, [N]
+        self.max_force = self.c_tw * self.hover_force # maximum thrust of each motor, [N]
+        self.avrg_act = (self.min_force+self.max_force)/2.0 
+        self.scale_act = self.max_force-self.avrg_act # actor scaling
+
+        self.f1 = self.hover_force # thrust of each 1st motor, [N]
+        self.f2 = self.hover_force # thrust of each 2nd motor, [N]
+        self.f3 = self.hover_force # thrust of each 3rd motor, [N]
+        self.f4 = self.hover_force # thrust of each 4th motor, [N]
         self.M  = np.zeros(3) # magnitude of moment on quadrotor, [Nm]
 
         self.fM = np.zeros((4, 1)) # Force-moment vector
@@ -43,8 +46,6 @@ class QuadEnv(gym.Env):
             [-self.c_tf, self.c_tf, -self.c_tf, self.c_tf]
         ]) # Conversion matrix of forces to force-moment 
         self.fM_to_forces = np.linalg.inv(self.forces_to_fM)
-        self.avrg_act = (self.min_force+self.max_force)/2.0 
-        self.scale_act = self.max_force-self.avrg_act # actor scaling
 
         # Simulation parameters:
         self.total_iter = 0 # num of total timesteps
@@ -53,24 +54,27 @@ class QuadEnv(gym.Env):
         self.ode_integrator = "solve_ivp" # or "euler", ODE solvers
         self.R2D = 180/pi # [rad] to [deg]
         self.D2R = pi/180 # [deg] to [rad]
-        self.e3 = np.array([0.0, 0.0, 1.0])
+        self.e1 = np.array([1., 0., 0.])
+        self.e2 = np.array([0., 1., 0.])
+        self.e3 = np.array([0., 0., 1.])
 
         # Coefficients in reward function:
         self.C_X = 0.35 # pos coef.
         self.C_V = 0.15 # vel coef.
         self.C_W = 0.25 # ang_vel coef.
-        self.C_R = 0.25 # att coef.
-        self.C_A = 0.005 # for efficient control
+        self.C_R = 0.1 # att coef.
+        self.C_A = 0.0 # for efficient control
 
         # Commands:
         self.xd     = np.array([0.0, 0.0, 0.0]) # desired tracking position command, [m] 
         self.xd_dot = np.array([0.0, 0.0, 0.0]) # [m/s]
         self.b1d    = np.array([1.0, 0.0, 0.0]) # desired heading direction        
+        self.Rd     = np.eye(3)
 
         # limits of states:
         self.x_lim = 2.0 # [m]
         self.v_lim = 4.0 # [m/s]
-        self.W_lim = 2*pi # [rad/s]
+        self.W_lim = pi # [rad/s]
         self.euler_lim = 80 # [deg]
         self.low = np.concatenate([-self.x_lim * np.ones(3),  
                                    -self.v_lim * np.ones(3),
@@ -185,10 +189,10 @@ class QuadEnv(gym.Env):
 
         # Reset forces & moments:
         self.f  = self.m * self.g
-        self.f1 = self.f_hover
-        self.f2 = self.f_hover
-        self.f3 = self.f_hover
-        self.f4 = self.f_hover
+        self.f1 = self.hover_force
+        self.f2 = self.hover_force
+        self.f3 = self.hover_force
+        self.f4 = self.hover_force
         self.M  = np.zeros(3)
 
         return np.array(self.state)
@@ -260,20 +264,35 @@ class QuadEnv(gym.Env):
         # Errors:
         eX = x - self.xd     # position error
         eV = v - self.xd_dot # velocity error
+        # Heading errors:
+        '''
         eR = angle_of_vectors(get_current_b1(R), self.b1d) # [rad], heading error
         eR = np.interp(eR, [0., pi], [0., 1.0]) # normalized into [0,1]
-        # To avoid `-log(0) = inf`
+        '''
+        # Attitude errors:
+        RdT_R = self.Rd.T @ R
+        eR = 0.5 * vee(RdT_R - RdT_R.T).flatten()
+
+        # To avoid `-log(0) = inf`:
         eps = 1e-10
         eX = np.where(abs(eX)<=eps, eX*eps, eX)
+        '''
         eR = eps if eR<=eps else eR
+        '''
+        eR = np.where(abs(eR)<=eps, eR*eps, eR)
 
-        reward = C_X*max(0, -(np.log(abs(eX)[0])+np.log(abs(eX)[1])+0.6*np.log(abs(eX)[2]))) \
-               + C_R*max(0, -np.log(eR)) \
-               - C_V*linalg.norm(eV, 2) \
-               - C_W*linalg.norm(W, 2) \
-               - C_A*(abs(action)).sum() \
-               #- C_R*np.sqrt(eR) \
-               #+ C_W*max(0, -(np.log(abs(W)[0])+np.log(abs(W)[1])+np.log(abs(W)[2]))) \
+        # Reward function:
+        reward_eX = +C_X*max(0, -(np.log(abs(eX)[0])+np.log(abs(eX)[1])+0.6*np.log(abs(eX)[2])))
+        reward_eR = +C_R*max(0, -(np.log(abs(eR)[0])+np.log(abs(eR)[1])+np.log(abs(eR)[2])))
+        '''
+        reward_eR = +C_R*max(0, -np.log(eR))
+        reward_eR = -C_R*np.sqrt(eR)
+        '''
+        reward_eV = -C_V*linalg.norm(eV, 2)
+        reward_eW = -C_W*linalg.norm(W, 2)
+        
+        reward = reward_eX + reward_eR + reward_eV + reward_eW \
+               #- C_A*(abs(action - self.hover_force)).sum() \
 
         reward *= 0.1 # rescaled by a factor of 0.1
 

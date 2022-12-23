@@ -34,7 +34,7 @@ if __name__ == "__main__":
     # Args of Environment:
     parser.add_argument('--env_id', default="Quad-v0",
                     help='Name of OpenAI Gym environment (default: Quad-v0)')
-    parser.add_argument('--wrapper_id', default="",
+    parser.add_argument('--wrapper_id', default="Sim2RealWrapper",
                     help='Name of wrapper: Sim2RealWrapper')    
     parser.add_argument('--aux_id', default="",
                     help='Name of auxiliary technique: EquivWrapper, CtrlSatWrapper')    
@@ -51,10 +51,10 @@ if __name__ == "__main__":
                     help='Number of nodes in hidden layers (default: 256)')
     parser.add_argument('--discount', default=0.99, type=float, metavar='G',
                         help='discount factor, gamma (default: 0.99)')
-    parser.add_argument('--lr', default=6e-4, type=float, metavar='G',
+    parser.add_argument('--lr', default=3e-4, type=float, metavar='G',
                         help='learning rate, alpha (default: 1e-5)')
     parser.add_argument("--start_timesteps", default=int(1e4), type=int, 
-                    help='Number of steps for uniform-random action selection (default: 25e3)')
+                    help='Number of steps for uniform-random action selection (default: 1e4)')
     # DDPG:
     parser.add_argument('--tau', default=0.005, type=float, metavar='G',
                     help='Target network update rate (default: 0.005)')
@@ -68,16 +68,16 @@ if __name__ == "__main__":
     parser.add_argument('--policy_update_freq', default=2, type=int, metavar='N',
                         help='Frequency of “Delayed” policy updates (default: 2)')
     # Args of Replay buffer:
-    parser.add_argument('--batch_size', default=256, type=int, metavar='N',
+    parser.add_argument('--batch_size', default=512, type=int, metavar='N',
                         help='Batch size of actor and critic networks (default: 256)')
     parser.add_argument('--replay_buffer_size', default=int(1e6), type=int, metavar='N',
                         help='Maximum size of replay buffer (default: 1e6)')
     args = parser.parse_args()
 
     # Show information:
-    print("-----------------------------------------")
+    print("---------------------------------------------")
     print(f"Env: {args.env_id}, Policy: {args.policy}, Seed: {args.seed}")
-    print("-----------------------------------------")
+    print("---------------------------------------------")
 
     # Make OpenAI Gym environment:
     if args.wrapper_id == "Sim2RealWrapper":
@@ -92,15 +92,19 @@ if __name__ == "__main__":
         torch.manual_seed(args.seed)
         np.random.seed(args.seed)
 
+    # Create directories:    
+    if not os.path.exists("./models"):
+        os.makedirs("./models")
+    if not os.path.exists("./results"):
+        os.makedirs("./results")
+
     # Initialize policy:
-    state_dim  = env.observation_space.shape[0]
+    state_dim = env.observation_space.shape[0]
     if args.aux_id == "EquivWrapper":
         state_dim -= 1 # (_x1, _x3, _v1, _v2, _v3)
     action_dim = env.action_space.shape[0] 
     min_act = env.action_space.low[0]
     max_act = env.action_space.high[0]
-    avrg_act = (min_act+max_act)/2.0 
-    scale_act = max_act-avrg_act # actor scaling
 
     kwargs = {
         "state_dim" : state_dim,
@@ -108,11 +112,10 @@ if __name__ == "__main__":
         "hidden_dim": args.hidden_dim,
         "min_act": min_act,
         "max_act": max_act,
-        "avrg_act": avrg_act,
-        "scale_act": scale_act,
         "discount": args.discount,
         "lr": args.lr,
         "tau": args.tau,
+        "env": env,
     }
 
     if args.policy == "DDPG":
@@ -135,18 +138,12 @@ if __name__ == "__main__":
         policy.load(f"./models/{file_name + '_best'}") # '_solved' or '_best'
 
     # Evaluate policy
-    eval_policy = [eval_agent(policy, avrg_act, args)]
+    i_eval = 0
+    eval_policy = [eval_agent(policy, args, i_eval, file_name)]
     if args.test_model == True:
         sys.exit("The trained model has been test!")
 
-    # Save models and optimizer parameters:
-    if args.save_model and not os.path.exists("./models"):
-        os.makedirs("./models")
-    max_total_reward = -1e9 # to save best models
-
     # Setup loggers:
-    if not os.path.exists("./results"):
-        os.makedirs("./results")
     log_step_path = os.path.join("./results", "log_step.txt")   
     log_eval_path = os.path.join("./results", "log_eval.txt")   
     log_step = open(log_step_path, "w+") # Total timesteps vs. Total reward
@@ -155,7 +152,7 @@ if __name__ == "__main__":
     # Initialize environment:
     state, done = env.reset(env_type='train'), False
     i_episode, episode_timesteps, episode_reward = 0, 0, 0
-    i_eval = 1  
+    max_total_reward = -1e9 # to save best models
 
     # Training loop:
     for total_timesteps in range(int(args.max_timesteps)):
@@ -173,8 +170,8 @@ if __name__ == "__main__":
             else:
                 action = policy.select_action(np.array(state))
             action = (
-                action + np.random.normal(0, avrg_act * args.act_noise, size=action_dim)
-            ).clip(min_act, max_act)
+                action + np.random.normal(0, args.act_noise, size=action_dim)
+            ).clip(min_act, max_act) # add exploration noise
         # Control input saturation:
         eX = np.round(state[0:3]*env.x_lim, 5) # position error [m]
         if args.aux_id == "CtrlSatWrapper":
@@ -191,13 +188,11 @@ if __name__ == "__main__":
             env.render()
 
         # Episode termination:
+        done_bool = float(done) if episode_timesteps < args.max_steps else 0.
         if episode_timesteps == args.max_steps: # Episode terminated!
             done = True
-        done_bool = float(done) if episode_timesteps < args.max_steps else 0.
-        # Problem is solved!
-        if (abs(eX) <= 0.007).all() and episode_timesteps == args.max_steps: 
-            policy.save(f"./models/{file_name+ '_solved_' + str(total_timesteps)}") # save solved model
-            done_bool = 1.
+            if (abs(eX) <= 0.005).all(): # Problem is solved!
+                done_bool = 1.
 
         # Store a set of transitions in replay buffer
         if args.aux_id == "EquivWrapper":
@@ -220,13 +215,14 @@ if __name__ == "__main__":
                 print("#---------------- Best! ----------------#")
                 best_model = 'Best Model!'
                 max_total_reward = episode_reward
-                policy.save(f"./models/{file_name + '_best'}")
+                if args.save_model == True:
+                    policy.save(f"./models/{file_name + '_best'}")
             else:
                 best_model = ''
 
             # Log data:
             if total_timesteps >= args.start_timesteps:
-                log_step.write('{}\t {}\n'.format(total_timesteps+1, episode_reward, best_model))
+                log_step.write('{}\t {}\t {}\n'.format(total_timesteps+1, episode_reward, best_model))
                 log_step.flush()
 
             # Reset environment:
@@ -237,8 +233,8 @@ if __name__ == "__main__":
         # Evaluate episode
         if (total_timesteps+1) % args.eval_freq == 0:
             if total_timesteps >= args.start_timesteps:
-                eval_policy.append(eval_agent(policy, avrg_act, args))
+                i_eval += 1
+                eval_policy.append(eval_agent(policy, args, i_eval, file_name))
                 # Logging updates:
                 log_eval.write('{}\t {}\n'.format(total_timesteps+1, eval_policy[i_eval]))
                 log_eval.flush()
-                i_eval += 1

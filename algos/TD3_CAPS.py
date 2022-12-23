@@ -8,7 +8,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Actor(nn.Module):
     def __init__(self, state_dim, action_dim, hidden_dim, \
-                       min_act, max_act, avrg_act, scale_act):
+                       min_act, max_act):
         super(Actor, self).__init__()
 
         # Fully-Connected (FC) layers
@@ -18,18 +18,12 @@ class Actor(nn.Module):
 
         self.min_act = min_act
         self.max_act = max_act
-        self.avrg_act = avrg_act
-        self.scale_act = scale_act
         
 
     def forward(self, state):
         action = F.relu(self.fc1(state))
         action = F.relu(self.fc2(action))
-        '''
-        # Linear scale, [-1, 1] -> [min_act, max_act] 
-        return self.scale_act * torch.tanh(self.fc3(action)) + self.avrg_act
-        '''
-        return torch.tanh(self.fc3(action))
+        return torch.tanh(self.fc3(action)) # [-1, 1]
 
 
 class Critic(nn.Module):
@@ -70,10 +64,10 @@ class Critic(nn.Module):
 
 class TD3_CAPS(object):
     def __init__(self, state_dim, action_dim, hidden_dim, \
-                       max_act, min_act, avrg_act, scale_act, \
-                       discount, lr, tau, target_noise, noise_clip, policy_update_freq):
+                       max_act, min_act, discount, lr, tau, env, 
+                       target_noise, noise_clip, policy_update_freq):
 
-        self.actor = Actor(state_dim, action_dim, hidden_dim, max_act, min_act, avrg_act, scale_act).to(device)
+        self.actor = Actor(state_dim, action_dim, hidden_dim, max_act, min_act).to(device)
         self.actor_target = copy.deepcopy(self.actor)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr)
 
@@ -83,13 +77,16 @@ class TD3_CAPS(object):
 
         self.min_act = min_act
         self.max_act = max_act
-        self.avrg_act = avrg_act
-        self.scale_act = scale_act
         self.discount = discount
         self.tau = tau
         self.target_noise = target_noise
         self.noise_clip = noise_clip
         self.policy_update_freq = policy_update_freq
+
+        self.hover_force = env.hover_force # [N]
+        self.min_force = env.min_force # [N]
+        self.max_force = env.max_force # [N]
+        self.action_dim = action_dim 
 
         self.total_it = 0
 
@@ -147,25 +144,32 @@ class TD3_CAPS(object):
         if self.total_it % self.policy_update_freq == 0:
 
             # Set actor loss s.t. Q(s,\mu(s)) approximates \max_a Q(s,a):
-            actor_loss = -self.critic.Q1(state, self.actor(state)).mean()
+            clipped_action = (self.actor(state)).clamp(self.min_act, self.max_act) 
+            actor_loss = -self.critic.Q1(state, clipped_action).mean()
             
             # Regularizing action policies for smooth control
-            lam_T = 0.5
+            lam_T = 0.5 # 0.5 - 0.8
             if lam_T > 0: # Temporal Smoothness
-                action_T = (self.actor(state)).clamp(self.min_act, self.max_act) 
                 next_action_T = (self.actor(next_state)).clamp(self.min_act, self.max_act) 
-                Loss_T = F.mse_loss(action_T, next_action_T)
+                Loss_T = F.mse_loss(clipped_action, next_action_T)
                 actor_loss += lam_T * Loss_T
 
             lam_S = 0.5
             if lam_S > 0: # Spatial Smoothness
-                action_S = (self.actor(state)).clamp(self.min_act, self.max_act)
                 noise_S = (
-                    torch.normal(mean=0.0, std=0.01, size=(1, 4))
-                    ).clamp(-0.01, 0.01).to(device) # mean and standard deviation
-                action_bar = (action_S + noise_S).clamp(self.min_act, self.max_act)
-                Loss_S = F.mse_loss(action_S, action_bar)
+                    torch.normal(mean=0., std=0.05, size=(1, self.action_dim))
+                    ).clamp(-self.noise_clip, self.noise_clip).to(device) # mean and standard deviation
+                action_bar = (clipped_action + noise_S).clamp(self.min_act, self.max_act)
+                Loss_S = F.mse_loss(clipped_action, action_bar)
                 actor_loss += lam_S * Loss_S
+
+            lam_M = 0.5 # 0.2 - 0.5
+            if lam_M > 0: # Magnitude Smoothness
+                hover_action = np.interp(
+                    self.hover_force, [self.min_force, self.max_force], [self.min_act, self.max_act]
+                    ) * torch.ones(batch_size, self.action_dim).to(device) # normalized into [-1, 1]
+                Loss_M = F.mse_loss(clipped_action, hover_action)
+                actor_loss += lam_M * Loss_M
 
             # Update policy by gradient ascent:
             self.actor_optimizer.zero_grad()
