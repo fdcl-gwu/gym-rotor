@@ -62,7 +62,7 @@ class QuadEnv(gym.Env):
         self.C_X = 0.35 # pos coef.
         self.C_V = 0.15 # vel coef.
         self.C_W = 0.25 # ang_vel coef.
-        self.C_R = 0.1 # att coef.
+        self.C_R = 0.17 # att coef.
         self.C_A = 0.0 # for efficient control
 
         # Commands:
@@ -153,8 +153,8 @@ class QuadEnv(gym.Env):
         state[17] = uniform(size=1, low=-self.init_W_error, high=self.init_W_error) 
 
         # R, attitude:
-        pitch = uniform(size=1, low=-self.init_R_error, high=self.init_R_error)
         roll  = uniform(size=1, low=-self.init_R_error, high=self.init_R_error)
+        pitch = uniform(size=1, low=-self.init_R_error, high=self.init_R_error)
         yaw   = uniform(size=1, low=-pi, high=pi) 
         R = euler2mat(roll, pitch, yaw) 
         """
@@ -265,32 +265,31 @@ class QuadEnv(gym.Env):
         eX = x - self.xd     # position error
         eV = v - self.xd_dot # velocity error
         # Heading errors:
-        '''
         eR = angle_of_vectors(get_current_b1(R), self.b1d) # [rad], heading error
         eR = np.interp(eR, [0., pi], [0., 1.0]) # normalized into [0,1]
-        '''
         # Attitude errors:
+        '''
         RdT_R = self.Rd.T @ R
         eR = 0.5 * vee(RdT_R - RdT_R.T).flatten()
-
+        '''
         # To avoid `-log(0) = inf`:
         eps = 1e-10
         eX = np.where(abs(eX)<=eps, eX*eps, eX)
-        '''
         eR = eps if eR<=eps else eR
         '''
         eR = np.where(abs(eR)<=eps, eR*eps, eR)
+        '''
 
         # Reward function:
         reward_eX = +C_X*max(0, -(np.log(abs(eX)[0])+np.log(abs(eX)[1])+0.6*np.log(abs(eX)[2])))
-        reward_eR = +C_R*max(0, -(np.log(abs(eR)[0])+np.log(abs(eR)[1])+np.log(abs(eR)[2])))
-        '''
         reward_eR = +C_R*max(0, -np.log(eR))
+        '''
+        reward_eR = +C_R*max(0, -(np.log(abs(eR)[0])+np.log(abs(eR)[1])+np.log(abs(eR)[2])))
         reward_eR = -C_R*np.sqrt(eR)
         '''
         reward_eV = -C_V*linalg.norm(eV, 2)
         reward_eW = -C_W*linalg.norm(W, 2)
-        
+
         reward = reward_eX + reward_eR + reward_eV + reward_eW \
                #- C_A*(abs(action - self.hover_force)).sum() \
 

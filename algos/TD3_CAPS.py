@@ -7,18 +7,14 @@ import torch.nn.functional as F
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Actor(nn.Module):
-    def __init__(self, state_dim, action_dim, hidden_dim, \
-                       min_act, max_act):
+    def __init__(self, state_dim, action_dim, actor_hidden_dim):
         super(Actor, self).__init__()
 
         # Fully-Connected (FC) layers
-        self.fc1 = nn.Linear(state_dim,  hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc3 = nn.Linear(hidden_dim, action_dim)        
+        self.fc1 = nn.Linear(state_dim,  actor_hidden_dim)
+        self.fc2 = nn.Linear(actor_hidden_dim, actor_hidden_dim)
+        self.fc3 = nn.Linear(actor_hidden_dim, action_dim)        
 
-        self.min_act = min_act
-        self.max_act = max_act
-        
 
     def forward(self, state):
         action = F.relu(self.fc1(state))
@@ -27,20 +23,20 @@ class Actor(nn.Module):
 
 
 class Critic(nn.Module):
-    def __init__(self, state_dim, action_dim, hidden_dim):
+    def __init__(self, state_dim, action_dim, critic_hidden_dim):
         super(Critic, self).__init__()
         """
         Clipped Double-Q Learning:
         """
         # Q1 architecture
-        self.fc1 = nn.Linear(state_dim + action_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc3 = nn.Linear(hidden_dim, 1)
+        self.fc1 = nn.Linear(state_dim + action_dim, critic_hidden_dim)
+        self.fc2 = nn.Linear(critic_hidden_dim, critic_hidden_dim)
+        self.fc3 = nn.Linear(critic_hidden_dim, 1)
 
         # Q2 architecture
-        self.fc4 = nn.Linear(state_dim + action_dim, hidden_dim)
-        self.fc5 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc6 = nn.Linear(hidden_dim, 1)
+        self.fc4 = nn.Linear(state_dim + action_dim, critic_hidden_dim)
+        self.fc5 = nn.Linear(critic_hidden_dim, critic_hidden_dim)
+        self.fc6 = nn.Linear(critic_hidden_dim, 1)
 
     def forward(self, state, action):
         q1 = F.relu(self.fc1(torch.cat([state, action], 1)))
@@ -63,15 +59,15 @@ class Critic(nn.Module):
 
 
 class TD3_CAPS(object):
-    def __init__(self, state_dim, action_dim, hidden_dim, \
+    def __init__(self, state_dim, action_dim, actor_hidden_dim, critic_hidden_dim, \
                        max_act, min_act, discount, lr, tau, env, 
                        target_noise, noise_clip, policy_update_freq):
 
-        self.actor = Actor(state_dim, action_dim, hidden_dim, max_act, min_act).to(device)
+        self.actor = Actor(state_dim, action_dim, actor_hidden_dim).to(device)
         self.actor_target = copy.deepcopy(self.actor)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr)
 
-        self.critic = Critic(state_dim, action_dim, hidden_dim).to(device)
+        self.critic = Critic(state_dim, action_dim, critic_hidden_dim).to(device)
         self.critic_target = copy.deepcopy(self.critic)
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr)
 
@@ -148,13 +144,13 @@ class TD3_CAPS(object):
             actor_loss = -self.critic.Q1(state, clipped_action).mean()
             
             # Regularizing action policies for smooth control
-            lam_T = 0.5 # 0.5 - 0.8
+            lam_T = 0.3 # 0.5 - 0.8
             if lam_T > 0: # Temporal Smoothness
                 next_action_T = (self.actor(next_state)).clamp(self.min_act, self.max_act) 
                 Loss_T = F.mse_loss(clipped_action, next_action_T)
                 actor_loss += lam_T * Loss_T
 
-            lam_S = 0.5
+            lam_S = 0.3 # 0.3 - 0.5
             if lam_S > 0: # Spatial Smoothness
                 noise_S = (
                     torch.normal(mean=0., std=0.05, size=(1, self.action_dim))
@@ -163,7 +159,7 @@ class TD3_CAPS(object):
                 Loss_S = F.mse_loss(clipped_action, action_bar)
                 actor_loss += lam_S * Loss_S
 
-            lam_M = 0.5 # 0.2 - 0.5
+            lam_M = 0.4 # 0.2 - 0.5
             if lam_M > 0: # Magnitude Smoothness
                 hover_action = np.interp(
                     self.hover_force, [self.min_force, self.max_force], [self.min_act, self.max_act]

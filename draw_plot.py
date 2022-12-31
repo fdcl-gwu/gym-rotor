@@ -15,7 +15,7 @@ plt.rcParams['font.size'] = 18
 fontsize = 32
 
 # Data load and indexing:
-file_name = 'log_18h_49m_09s'
+file_name = 'log_17h_33m_17s'
 log_date = np.loadtxt(os.path.join('./results', file_name + '.dat')) 
 start_index = 3
 end_index = len(log_date)

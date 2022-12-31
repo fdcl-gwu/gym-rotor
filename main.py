@@ -34,21 +34,23 @@ if __name__ == "__main__":
     # Args of Environment:
     parser.add_argument('--env_id', default="Quad-v0",
                     help='Name of OpenAI Gym environment (default: Quad-v0)')
-    parser.add_argument('--wrapper_id', default="Sim2RealWrapper",
+    parser.add_argument('--wrapper_id', default="",
                     help='Name of wrapper: Sim2RealWrapper')    
     parser.add_argument('--aux_id', default="",
                     help='Name of auxiliary technique: EquivWrapper, CtrlSatWrapper')    
     parser.add_argument('--max_steps', default=2000, type=int,
                     help='Maximum number of steps in each episode (default: 3000)')
-    parser.add_argument('--max_timesteps', default=int(1e8), type=int,
-                    help='Number of total timesteps (default: 1e8)')
+    parser.add_argument('--max_timesteps', default=int(3e6), type=int,
+                    help='Number of total timesteps (default: 3e6)')
     parser.add_argument('--render', default=False, type=bool,
                     help='Simulation visualization (default: False)')
     # Args of Agents:
     parser.add_argument("--policy", default="TD3_CAPS",
                     help='Which algorithms? DDPG or TD3 or TD3_CAPS(default: TD3)')
-    parser.add_argument("--hidden_dim", default=64, type=int, 
-                    help='Number of nodes in hidden layers (default: 256)')
+    parser.add_argument("--actor_hidden_dim", default=32, type=int, 
+                    help='Number of nodes in hidden layers of actor net (default: 64)')
+    parser.add_argument("--critic_hidden_dim", default=128, type=int, 
+                    help='Number of nodes in hidden layers of critic net (default: 256)')
     parser.add_argument('--discount', default=0.99, type=float, metavar='G',
                         help='discount factor, gamma (default: 0.99)')
     parser.add_argument('--lr', default=3e-4, type=float, metavar='G',
@@ -68,16 +70,19 @@ if __name__ == "__main__":
     parser.add_argument('--policy_update_freq', default=2, type=int, metavar='N',
                         help='Frequency of “Delayed” policy updates (default: 2)')
     # Args of Replay buffer:
-    parser.add_argument('--batch_size', default=512, type=int, metavar='N',
+    parser.add_argument('--batch_size', default=256, type=int, metavar='N',
                         help='Batch size of actor and critic networks (default: 256)')
     parser.add_argument('--replay_buffer_size', default=int(1e6), type=int, metavar='N',
                         help='Maximum size of replay buffer (default: 1e6)')
     args = parser.parse_args()
 
     # Show information:
-    print("---------------------------------------------")
-    print(f"Env: {args.env_id}, Policy: {args.policy}, Seed: {args.seed}")
-    print("---------------------------------------------")
+    print("------------------------------------------------------------------------------------------")
+    print("Env:", args.env_id, "| Auxiliary:", args.aux_id, "| Wrapper:", args.wrapper_id, 
+          "| Policy:", args.policy, "| Seed:", args.seed)
+    print("gamma:", args.discount, "| lr:", args.lr, "| Actor hidden dim:", args.actor_hidden_dim, 
+          "| Critic hidden dim:", args.critic_hidden_dim, "| Batch size:", args.batch_size)
+    print("------------------------------------------------------------------------------------------")
 
     # Make OpenAI Gym environment:
     if args.wrapper_id == "Sim2RealWrapper":
@@ -109,7 +114,8 @@ if __name__ == "__main__":
     kwargs = {
         "state_dim" : state_dim,
         "action_dim": action_dim,
-        "hidden_dim": args.hidden_dim,
+        "actor_hidden_dim": args.actor_hidden_dim,
+        "critic_hidden_dim": args.critic_hidden_dim,
         "min_act": min_act,
         "max_act": max_act,
         "discount": args.discount,
@@ -133,19 +139,19 @@ if __name__ == "__main__":
     replay_buffer = replay.ReplayBuffer(state_dim, action_dim, args.replay_buffer_size)
 
     # Load trained models and optimizer parameters:
-    file_name = f"{args.policy}_{args.env_id}"
+    file_name = f"{args.policy}_{args.env_id}_{args.seed}"
     if args.test_model == True:
         policy.load(f"./models/{file_name + '_best'}") # '_solved' or '_best'
 
-    # Evaluate policy
+    # Evaluate policy:
     i_eval = 0
     eval_policy = [eval_agent(policy, args, i_eval, file_name)]
     if args.test_model == True:
         sys.exit("The trained model has been test!")
 
     # Setup loggers:
-    log_step_path = os.path.join("./results", "log_step.txt")   
-    log_eval_path = os.path.join("./results", "log_eval.txt")   
+    log_step_path = os.path.join("./results", "log_step_seed_"+str(args.seed)+".txt")   
+    log_eval_path = os.path.join("./results", "log_eval_seed_"+str(args.seed)+".txt")
     log_step = open(log_step_path, "w+") # Total timesteps vs. Total reward
     log_eval = open(log_eval_path,"w+")  # Total timesteps vs. Evaluated average reward
 

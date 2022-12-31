@@ -7,46 +7,36 @@ import torch.nn.functional as F
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Actor(nn.Module):
-    def __init__(self, state_dim, action_dim, hidden_dim, \
-                       min_act, max_act, avrg_act, scale_act):
+    def __init__(self, state_dim, action_dim, actor_hidden_dim):
         super(Actor, self).__init__()
 
         # Fully-Connected (FC) layers
-        self.fc1 = nn.Linear(state_dim,  hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc3 = nn.Linear(hidden_dim, action_dim)        
+        self.fc1 = nn.Linear(state_dim,  actor_hidden_dim)
+        self.fc2 = nn.Linear(actor_hidden_dim, actor_hidden_dim)
+        self.fc3 = nn.Linear(actor_hidden_dim, action_dim)        
 
-        self.min_act = min_act
-        self.max_act = max_act
-        self.avrg_act = avrg_act
-        self.scale_act = scale_act
-        
 
     def forward(self, state):
         action = F.relu(self.fc1(state))
         action = F.relu(self.fc2(action))
-        '''
-        # Linear scale, [-1, 1] -> [min_act, max_act] 
-        return self.scale_act * torch.tanh(self.fc3(action)) + self.avrg_act
-        '''
-        return torch.tanh(self.fc3(action))
+        return torch.tanh(self.fc3(action)) # [-1, 1]
 
 
 class Critic(nn.Module):
-    def __init__(self, state_dim, action_dim, hidden_dim):
+    def __init__(self, state_dim, action_dim, critic_hidden_dim):
         super(Critic, self).__init__()
         """
         Clipped Double-Q Learning:
         """
         # Q1 architecture
-        self.fc1 = nn.Linear(state_dim + action_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc3 = nn.Linear(hidden_dim, 1)
+        self.fc1 = nn.Linear(state_dim + action_dim, critic_hidden_dim)
+        self.fc2 = nn.Linear(critic_hidden_dim, critic_hidden_dim)
+        self.fc3 = nn.Linear(critic_hidden_dim, 1)
 
         # Q2 architecture
-        self.fc4 = nn.Linear(state_dim + action_dim, hidden_dim)
-        self.fc5 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc6 = nn.Linear(hidden_dim, 1)
+        self.fc4 = nn.Linear(state_dim + action_dim, critic_hidden_dim)
+        self.fc5 = nn.Linear(critic_hidden_dim, critic_hidden_dim)
+        self.fc6 = nn.Linear(critic_hidden_dim, 1)
 
     def forward(self, state, action):
         q1 = F.relu(self.fc1(torch.cat([state, action], 1)))
@@ -69,27 +59,30 @@ class Critic(nn.Module):
 
 
 class TD3(object):
-    def __init__(self, state_dim, action_dim, hidden_dim, \
-                       max_act, min_act, avrg_act, scale_act, \
-                       discount, lr, tau, target_noise, noise_clip, policy_update_freq):
+    def __init__(self, state_dim, action_dim, actor_hidden_dim, critic_hidden_dim, \
+                       max_act, min_act, discount, lr, tau, env, 
+                       target_noise, noise_clip, policy_update_freq):
 
-        self.actor = Actor(state_dim, action_dim, hidden_dim, max_act, min_act, avrg_act, scale_act).to(device)
+        self.actor = Actor(state_dim, action_dim, actor_hidden_dim).to(device)
         self.actor_target = copy.deepcopy(self.actor)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr)
 
-        self.critic = Critic(state_dim, action_dim, hidden_dim).to(device)
+        self.critic = Critic(state_dim, action_dim, critic_hidden_dim).to(device)
         self.critic_target = copy.deepcopy(self.critic)
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr)
 
         self.min_act = min_act
         self.max_act = max_act
-        self.avrg_act = avrg_act
-        self.scale_act = scale_act
         self.discount = discount
         self.tau = tau
         self.target_noise = target_noise
         self.noise_clip = noise_clip
         self.policy_update_freq = policy_update_freq
+
+        self.hover_force = env.hover_force # [N]
+        self.min_force = env.min_force # [N]
+        self.max_force = env.max_force # [N]
+        self.action_dim = action_dim 
 
         self.total_it = 0
 

@@ -12,14 +12,14 @@ import torch.nn.functional as F
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Actor(nn.Module):
-    def __init__(self, state_dim, action_dim, hidden_dim, \
+    def __init__(self, state_dim, action_dim, actor_hidden_dim, \
                        min_act, max_act, avrg_act, scale_act):
         super(Actor, self).__init__()
 
         # Fully-Connected (FC) layers
-        self.fc1 = nn.Linear(state_dim,  hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc3 = nn.Linear(hidden_dim, action_dim)
+        self.fc1 = nn.Linear(state_dim,  actor_hidden_dim)
+        self.fc2 = nn.Linear(actor_hidden_dim, actor_hidden_dim)
+        self.fc3 = nn.Linear(actor_hidden_dim, action_dim)
         
         self.min_act = min_act
         self.max_act = max_act
@@ -38,13 +38,13 @@ class Actor(nn.Module):
 
 
 class Critic(nn.Module):
-	def __init__(self, state_dim, action_dim, hidden_dim):
+	def __init__(self, state_dim, action_dim, critic_hidden_dim):
 		super(Critic, self).__init__()
 
 		# FC layers
-		self.fc1 = nn.Linear(state_dim + action_dim, hidden_dim)
-		self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-		self.fc3 = nn.Linear(hidden_dim, 1)
+		self.fc1 = nn.Linear(state_dim + action_dim, critic_hidden_dim)
+		self.fc2 = nn.Linear(critic_hidden_dim, critic_hidden_dim)
+		self.fc3 = nn.Linear(critic_hidden_dim, 1)
 
 
 	def forward(self, state, action):
@@ -54,15 +54,15 @@ class Critic(nn.Module):
 
 
 class DDPG(object):
-    def __init__(self, state_dim, action_dim, hidden_dim, \
+    def __init__(self, state_dim, action_dim, actor_hidden_dim, critic_hidden_dim, \
                        min_act, max_act, avrg_act, scale_act, \
                        discount, lr, tau):
         
-        self.actor = Actor(state_dim, action_dim, hidden_dim, min_act, max_act, avrg_act, scale_act).to(device)
+        self.actor = Actor(state_dim, action_dim, actor_hidden_dim, min_act, max_act, avrg_act, scale_act).to(device)
         self.actor_target = copy.deepcopy(self.actor)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr)
 
-        self.critic = Critic(state_dim, action_dim, hidden_dim).to(device)
+        self.critic = Critic(state_dim, action_dim, critic_hidden_dim).to(device)
         self.critic_target = copy.deepcopy(self.critic)
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr)
 
