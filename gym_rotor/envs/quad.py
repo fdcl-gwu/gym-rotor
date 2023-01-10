@@ -62,8 +62,7 @@ class QuadEnv(gym.Env):
         self.C_X = 0.35 # pos coef.
         self.C_V = 0.15 # vel coef.
         self.C_W = 0.25 # ang_vel coef.
-        self.C_R = 0.17 # att coef.
-        self.C_A = 0.0 # for efficient control
+        self.C_R = 0.15 # att coef.
 
         # Commands:
         self.xd     = np.array([0.0, 0.0, 0.0]) # desired tracking position command, [m] 
@@ -74,7 +73,7 @@ class QuadEnv(gym.Env):
         # limits of states:
         self.x_lim = 2.0 # [m]
         self.v_lim = 4.0 # [m/s]
-        self.W_lim = pi # [rad/s]
+        self.W_lim = 2*pi # [rad/s]
         self.euler_lim = 80 # [deg]
         self.low = np.concatenate([-self.x_lim * np.ones(3),  
                                    -self.v_lim * np.ones(3),
@@ -259,7 +258,6 @@ class QuadEnv(gym.Env):
         C_V = self.C_V # vel coef.
         C_W = self.C_W # ang_vel coef.
         C_R = self.C_R # att coef.
-        C_A = self.C_A # for efficient control
 
         # Errors:
         eX = x - self.xd     # position error
@@ -290,8 +288,7 @@ class QuadEnv(gym.Env):
         reward_eV = -C_V*linalg.norm(eV, 2)
         reward_eW = -C_W*linalg.norm(W, 2)
 
-        reward = reward_eX + reward_eR + reward_eV + reward_eW \
-               #- C_A*(abs(action - self.hover_force)).sum() \
+        reward = reward_eX + reward_eR + reward_eV + reward_eW
 
         reward *= 0.1 # rescaled by a factor of 0.1
 
@@ -338,14 +335,14 @@ class QuadEnv(gym.Env):
     def sample_init_error(self, env_type='train'):
         if env_type == 'train':
             self.init_x_error = self.x_lim - 0.1 # minus 0.1m
-            self.init_v_error = self.v_lim*0.2 # 20%; initial vel error, [m/s]
-            self.init_R_error = 10 * self.D2R # 10 deg
-            self.init_W_error = self.W_lim*0.1 # initial ang vel error, [rad/s]
+            self.init_v_error = self.v_lim*0.5 # 50%; initial vel error, [m/s]
+            self.init_R_error = 50 * self.D2R  # 50 deg 
+            self.init_W_error = self.W_lim*0.3 # 30%; initial ang vel error, [rad/s]
         elif env_type == 'eval':
             self.init_x_error = self.x_lim - 0.1 # minus 0.1m
-            self.init_v_error = self.v_lim*0.1 # initial vel error, [m/s]
-            self.init_R_error = 3 * self.D2R # 3 deg
-            self.init_W_error = self.W_lim*0.01 # 1%; initial ang vel error, [rad/s]
+            self.init_v_error = self.v_lim*0.3 # 30%; initial vel error, [m/s]
+            self.init_R_error = 20 * self.D2R  # 20 deg
+            self.init_W_error = self.W_lim*0.1 # 10%; initial ang vel error, [rad/s]
 
 
     def render(self, mode='human', close=False):

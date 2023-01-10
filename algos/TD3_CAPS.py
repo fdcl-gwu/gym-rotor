@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.optim.lr_scheduler import CyclicLR, OneCycleLR
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -66,10 +67,22 @@ class TD3_CAPS(object):
         self.actor = Actor(state_dim, action_dim, actor_hidden_dim).to(device)
         self.actor_target = copy.deepcopy(self.actor)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr)
+        self.actor_scheduler = CyclicLR(self.actor_optimizer, base_lr = 1e-7,  max_lr = 1e-3, \
+            cycle_momentum = False, mode='triangular') # {triangular, triangular2, exp_range} 1e-6, 5e-4
+        '''
+        self.actor_scheduler = OneCycleLR(self.actor_optimizer, max_lr = 3e-4, total_steps = int(3e6), \
+            anneal_strategy='cos') # {'cos', 'linear'}
+        '''
 
         self.critic = Critic(state_dim, action_dim, critic_hidden_dim).to(device)
         self.critic_target = copy.deepcopy(self.critic)
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr)
+        self.critic_scheduler = CyclicLR(self.critic_optimizer, base_lr = 1e-7,  max_lr = 1e-3, \
+            cycle_momentum = False, mode='triangular') # {triangular, triangular2, exp_range}
+        '''
+        self.critic_scheduler = OneCycleLR(self.critic_optimizer, max_lr = 3e-4, total_steps = int(3e6), \
+            anneal_strategy='cos') # {'cos', 'linear'}
+        '''
 
         self.min_act = min_act
         self.max_act = max_act
@@ -131,7 +144,7 @@ class TD3_CAPS(object):
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
         self.critic_optimizer.step()
-
+        self.critic_scheduler.step()
 
         """
         Policy learning side of TD3 with actor networks:
@@ -171,6 +184,7 @@ class TD3_CAPS(object):
             self.actor_optimizer.zero_grad()
             actor_loss.backward()
             self.actor_optimizer.step()
+            self.actor_scheduler.step()
 
             # Update target targets:
             for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):

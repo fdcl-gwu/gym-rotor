@@ -29,7 +29,7 @@ if __name__ == "__main__":
                     help='Load trained models and save log(default: False)')      
     parser.add_argument("--eval_freq", default=1e4, type=int,
                     help='How often (time steps) evaluate our trained model')       
-    parser.add_argument('--seed', default=1234, type=int, metavar='N',
+    parser.add_argument('--seed', default=123, type=int, metavar='N',
                     help='Random seed of Gym, PyTorch and Numpy (default: 123)')      
     # Args of Environment:
     parser.add_argument('--env_id', default="Quad-v0",
@@ -40,20 +40,20 @@ if __name__ == "__main__":
                     help='Name of auxiliary technique: EquivWrapper, CtrlSatWrapper')    
     parser.add_argument('--max_steps', default=2000, type=int,
                     help='Maximum number of steps in each episode (default: 3000)')
-    parser.add_argument('--max_timesteps', default=int(3e6), type=int,
+    parser.add_argument('--max_timesteps', default=int(7e6), type=int,
                     help='Number of total timesteps (default: 3e6)')
     parser.add_argument('--render', default=False, type=bool,
                     help='Simulation visualization (default: False)')
     # Args of Agents:
     parser.add_argument("--policy", default="TD3_CAPS",
                     help='Which algorithms? DDPG or TD3 or TD3_CAPS(default: TD3)')
-    parser.add_argument("--actor_hidden_dim", default=32, type=int, 
+    parser.add_argument("--actor_hidden_dim", default=16, type=int, 
                     help='Number of nodes in hidden layers of actor net (default: 64)')
-    parser.add_argument("--critic_hidden_dim", default=128, type=int, 
+    parser.add_argument("--critic_hidden_dim", default=256, type=int, 
                     help='Number of nodes in hidden layers of critic net (default: 256)')
     parser.add_argument('--discount', default=0.99, type=float, metavar='G',
                         help='discount factor, gamma (default: 0.99)')
-    parser.add_argument('--lr', default=3e-4, type=float, metavar='G',
+    parser.add_argument('--lr', default=1e-4, type=float, metavar='G',
                         help='learning rate, alpha (default: 1e-5)')
     parser.add_argument("--start_timesteps", default=int(1e4), type=int, 
                     help='Number of steps for uniform-random action selection (default: 1e4)')
