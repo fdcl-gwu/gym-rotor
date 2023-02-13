@@ -39,8 +39,8 @@ if __name__ == "__main__":
     parser.add_argument('--aux_id', default="",
                     help='Name of auxiliary technique: EquivWrapper, CtrlSatWrapper')    
     parser.add_argument('--max_steps', default=2000, type=int,
-                    help='Maximum number of steps in each episode (default: 3000)')
-    parser.add_argument('--max_timesteps', default=int(7e6), type=int,
+                    help='Maximum number of steps in each episode (default: 2000)')
+    parser.add_argument('--max_timesteps', default=int(6e6), type=int,
                     help='Number of total timesteps (default: 3e6)')
     parser.add_argument('--render', default=False, type=bool,
                     help='Simulation visualization (default: False)')
@@ -49,7 +49,7 @@ if __name__ == "__main__":
                     help='Which algorithms? DDPG or TD3 or TD3_CAPS(default: TD3)')
     parser.add_argument("--actor_hidden_dim", default=16, type=int, 
                     help='Number of nodes in hidden layers of actor net (default: 64)')
-    parser.add_argument("--critic_hidden_dim", default=256, type=int, 
+    parser.add_argument("--critic_hidden_dim", default=512, type=int, 
                     help='Number of nodes in hidden layers of critic net (default: 256)')
     parser.add_argument('--discount', default=0.99, type=float, metavar='G',
                         help='discount factor, gamma (default: 0.99)')
@@ -67,7 +67,7 @@ if __name__ == "__main__":
                     help='Stddev for smoothing noise added to target policy (default: 0.2)')
     parser.add_argument("--noise_clip", default=0.5, type=float,
                     help='Clipping range of target policy smoothing noise (default: 0.5)')
-    parser.add_argument('--policy_update_freq', default=2, type=int, metavar='N',
+    parser.add_argument('--policy_update_freq', default=8, type=int, metavar='N',
                         help='Frequency of “Delayed” policy updates (default: 2)')
     # Args of Replay buffer:
     parser.add_argument('--batch_size', default=256, type=int, metavar='N',
@@ -218,7 +218,7 @@ if __name__ == "__main__":
                         
             # Save best model:
             if episode_reward > max_total_reward:
-                print("#---------------- Best! ----------------#")
+                print("#-------------------------------- Best! --------------------------------#")
                 best_model = 'Best Model!'
                 max_total_reward = episode_reward
                 if args.save_model == True:

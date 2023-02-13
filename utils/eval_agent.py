@@ -83,7 +83,7 @@ def eval_agent(policy, args, i_eval, file_name):
             # Episode termination:
             if episode_timesteps == args.max_steps:
                 done = True
-                success = True if (abs(eX) >= 0.005).all() else False
+                success = True if (abs(eX) <= 0.005).all() else False
                 success_count.append(success)
 
         # Save data:

@@ -48,7 +48,6 @@ class QuadEnv(gym.Env):
         self.fM_to_forces = np.linalg.inv(self.forces_to_fM)
 
         # Simulation parameters:
-        self.total_iter = 0 # num of total timesteps
         self.freq = 200 # frequency [Hz]
         self.dt = 1./self.freq # discrete timestep, t(2) - t(1), [sec]
         self.ode_integrator = "solve_ivp" # or "euler", ODE solvers
@@ -57,12 +56,13 @@ class QuadEnv(gym.Env):
         self.e1 = np.array([1., 0., 0.])
         self.e2 = np.array([0., 1., 0.])
         self.e3 = np.array([0., 0., 1.])
+        self.eps = 1e-10
 
         # Coefficients in reward function:
         self.C_X = 0.35 # pos coef.
+        self.C_R = 0.25 # att coef.
         self.C_V = 0.15 # vel coef.
         self.C_W = 0.25 # ang_vel coef.
-        self.C_R = 0.15 # att coef.
 
         # Commands:
         self.xd     = np.array([0.0, 0.0, 0.0]) # desired tracking position command, [m] 
@@ -71,10 +71,10 @@ class QuadEnv(gym.Env):
         self.Rd     = np.eye(3)
 
         # limits of states:
-        self.x_lim = 2.0 # [m]
-        self.v_lim = 4.0 # [m/s]
+        self.x_lim = 3.0 # [m]
+        self.v_lim = 5.0 # [m/s]
         self.W_lim = 2*pi # [rad/s]
-        self.euler_lim = 80 # [deg]
+        self.euler_lim = 85 # [deg]
         self.low = np.concatenate([-self.x_lim * np.ones(3),  
                                    -self.v_lim * np.ones(3),
                                    -np.ones(9),
@@ -154,7 +154,7 @@ class QuadEnv(gym.Env):
         # R, attitude:
         roll  = uniform(size=1, low=-self.init_R_error, high=self.init_R_error)
         pitch = uniform(size=1, low=-self.init_R_error, high=self.init_R_error)
-        yaw   = uniform(size=1, low=-pi, high=pi) 
+        yaw   = uniform(size=1, low=-(pi-self.eps), high=(pi-self.eps)) 
         R = euler2mat(roll, pitch, yaw) 
         """
         # NED; https://www.wilselby.com/research/arducopter/modeling/
@@ -255,41 +255,48 @@ class QuadEnv(gym.Env):
 
         # Reward function coefficients:
         C_X = self.C_X # pos coef.
+        C_R = self.C_R # att coef.
         C_V = self.C_V # vel coef.
         C_W = self.C_W # ang_vel coef.
-        C_R = self.C_R # att coef.
 
         # Errors:
         eX = x - self.xd     # position error
         eV = v - self.xd_dot # velocity error
         # Heading errors:
+        '''
         eR = angle_of_vectors(get_current_b1(R), self.b1d) # [rad], heading error
         eR = np.interp(eR, [0., pi], [0., 1.0]) # normalized into [0,1]
+        '''
         # Attitude errors:
-        '''
         RdT_R = self.Rd.T @ R
-        eR = 0.5 * vee(RdT_R - RdT_R.T).flatten()
-        '''
+        eR = 0.5*(np.eye(3) - RdT_R).trace() # eR = 0.5 * vee(RdT_R - RdT_R.T).flatten()
         # To avoid `-log(0) = inf`:
-        eps = 1e-10
-        eX = np.where(abs(eX)<=eps, eX*eps, eX)
-        eR = eps if eR<=eps else eR
+        """
+        eX = np.where(abs(eX)<=self.eps, eX*self.eps, eX)
+        eR = self.eps if eR<=self.eps else eR
+        """
         '''
         eR = np.where(abs(eR)<=eps, eR*eps, eR)
         '''
 
         # Reward function:
+        reward_eX = +C_X*max(0., (1.-(abs(eX)[0]**2))+(1.-(abs(eX)[1]**2))+(1.-0.6*(abs(eX)[2]**2)))
+        eR = np.interp(eR, [0., 2.], [0., 1.]) # normalized into [0,1]
+        reward_eR = +C_R*max(0., 1. - eR**2)
+        reward_eV = -C_V*(linalg.norm(eV, 2)**2)
+        reward_eW = -C_W*(linalg.norm(W, 2)**2)
+        """ Old version.
         reward_eX = +C_X*max(0, -(np.log(abs(eX)[0])+np.log(abs(eX)[1])+0.6*np.log(abs(eX)[2])))
         reward_eR = +C_R*max(0, -np.log(eR))
+        reward_eV = -C_V*linalg.norm(eV, 2)
+        reward_eW = -C_W*linalg.norm(W, 2)
+        """
         '''
         reward_eR = +C_R*max(0, -(np.log(abs(eR)[0])+np.log(abs(eR)[1])+np.log(abs(eR)[2])))
         reward_eR = -C_R*np.sqrt(eR)
         '''
-        reward_eV = -C_V*linalg.norm(eV, 2)
-        reward_eW = -C_W*linalg.norm(W, 2)
 
         reward = reward_eX + reward_eR + reward_eV + reward_eW
-
         reward *= 0.1 # rescaled by a factor of 0.1
 
         return reward
@@ -336,8 +343,8 @@ class QuadEnv(gym.Env):
         if env_type == 'train':
             self.init_x_error = self.x_lim - 0.1 # minus 0.1m
             self.init_v_error = self.v_lim*0.5 # 50%; initial vel error, [m/s]
-            self.init_R_error = 50 * self.D2R  # 50 deg 
-            self.init_W_error = self.W_lim*0.3 # 30%; initial ang vel error, [rad/s]
+            self.init_R_error = 60 * self.D2R  # 60 deg 
+            self.init_W_error = self.W_lim*0.5 # 50%; initial ang vel error, [rad/s]
         elif env_type == 'eval':
             self.init_x_error = self.x_lim - 0.1 # minus 0.1m
             self.init_v_error = self.v_lim*0.3 # 30%; initial vel error, [m/s]
