@@ -67,8 +67,8 @@ class TD3_CAPS(object):
         self.actor = Actor(state_dim, action_dim, actor_hidden_dim).to(device)
         self.actor_target = copy.deepcopy(self.actor)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr)
-        self.actor_scheduler = CyclicLR(self.actor_optimizer, base_lr = 1e-7,  max_lr = 1e-3, \
-            cycle_momentum = False, mode='triangular') # {triangular, triangular2, exp_range} 1e-6, 5e-4
+        self.actor_scheduler = CyclicLR(self.actor_optimizer, base_lr = 1e-7,  max_lr = 7e-4, \
+            cycle_momentum = False, mode='triangular') # {triangular, triangular2, exp_range}
         '''
         self.actor_scheduler = OneCycleLR(self.actor_optimizer, max_lr = 3e-4, total_steps = int(3e6), \
             anneal_strategy='cos') # {'cos', 'linear'}
@@ -77,7 +77,7 @@ class TD3_CAPS(object):
         self.critic = Critic(state_dim, action_dim, critic_hidden_dim).to(device)
         self.critic_target = copy.deepcopy(self.critic)
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr)
-        self.critic_scheduler = CyclicLR(self.critic_optimizer, base_lr = 1e-7,  max_lr = 1e-3, \
+        self.critic_scheduler = CyclicLR(self.critic_optimizer, base_lr = 1e-7,  max_lr = 7e-4, \
             cycle_momentum = False, mode='triangular') # {triangular, triangular2, exp_range}
         '''
         self.critic_scheduler = OneCycleLR(self.critic_optimizer, max_lr = 3e-4, total_steps = int(3e6), \

@@ -24,13 +24,12 @@ def eval_agent(policy, args, i_eval, file_name):
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
+    # Save solved model:
+    success_count = [] if args.save_model else None
+
     episode_eval = 5
     avg_reward = 0.0
     for _ in range(episode_eval):
-        # Data save:
-        if args.save_log:
-            act_list, obs_list, cmd_list = [], [], []
-
         # State:
         state, done = eval_env.reset(env_type='eval'), False
 
@@ -39,10 +38,14 @@ def eval_agent(policy, args, i_eval, file_name):
 
         # Goal state:
         xd = np.array([0.0, 0.0, 0.0])/eval_env.x_lim 
-        xd_dot = np.array([0.0, 0.0, 0.0])/eval_env.v_lim 
+        xd_dot = np.array([0.0, 0.0, 0.0])/eval_env.v_lim  
         Wd = np.array([0.0, 0.0, 0.0])/eval_env.W_lim 
         b1d = np.array([1.0, 0.0, 0.0]) # desired heading direction
         # b1d = get_current_b1(R) # desired heading direction
+
+        # Data save:
+        if args.save_log:
+            act_list, obs_list, cmd_list = [], [], []
 
         episode_timesteps = 0
         while not done:
@@ -56,6 +59,7 @@ def eval_agent(policy, args, i_eval, file_name):
                 action = policy.select_action(np.array(state_equiv))
             else:
                 action = policy.select_action(np.array(state))
+
             # Control input saturation:
             eX = np.round(state[0:3]*eval_env.x_lim, 5) # position error [m]
             if args.aux_id == "CtrlSatWrapper":
@@ -79,6 +83,8 @@ def eval_agent(policy, args, i_eval, file_name):
             # Episode termination:
             if episode_timesteps == args.max_steps:
                 done = True
+                success = True if (abs(eX) >= 0.005).all() else False
+                success_count.append(success)
 
         # Save data:
         if args.save_log:
@@ -94,12 +100,11 @@ def eval_agent(policy, args, i_eval, file_name):
     avg_reward /= episode_eval
 
     # Save solved model:
-    if (abs(eX) <= 0.005).all() and args.save_model == True: # Problem is solved!
+    if all(i == True for i in success_count) and args.save_model == True: # Problem is solved!
         policy.save(f"./models/{file_name+ '_solved_' + str(i_eval)}") 
 
-    print("---------------------------------------")
+    print("------------------------------------------------------------------------------------------")
     print(f"Evaluation over {episode_eval}, average reward: {avg_reward:.3f}, eX: {eX}")
-    print("---------------------------------------")
-
+    print("------------------------------------------------------------------------------------------")
 
     return avg_reward

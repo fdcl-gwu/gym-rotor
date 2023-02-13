@@ -5,7 +5,6 @@ import gym_rotor
 import numpy as np
 from datetime import datetime
 import matplotlib.pyplot as plt
-import matplotlib as mpl
 # https://www.geeksforgeeks.org/style-plots-using-matplotlib/
 # https://www.dunderdata.com/blog/view-all-available-matplotlib-styles
 # https://matplotlib.org/stable/gallery/color/named_colors.html
