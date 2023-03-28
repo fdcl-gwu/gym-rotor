@@ -1,14 +1,13 @@
 import os
 import torch
 import numpy as np
-from numpy import linalg
 from datetime import datetime
 
 import gym
 import gym_rotor
 from gym_rotor.envs.s2r_wrapper import Sim2RealWrapper
 from gym_rotor.envs.quad_utils import *
-from utils.ctrl_utils import *
+from utils.equiv_utils import *
 
 # Runs policy for n episodes and returns average reward.
 def eval_agent(policy, args, i_eval, file_name):
@@ -60,13 +59,9 @@ def eval_agent(policy, args, i_eval, file_name):
             else:
                 action = policy.select_action(np.array(state))
 
-            # Control input saturation:
-            eX = np.round(state[0:3]*eval_env.x_lim, 5) # position error [m]
-            if args.aux_id == "CtrlSatWrapper":
-                action = ctrl_sat(action, eX, -1., +1., eval_env)
-
             # Perform action
             state, reward, done, _ = eval_env.step(action)
+            eX = np.round(state[0:3]*eval_env.x_lim, 5) # position error [m]
 
             # 3D visualization:
             #eval_env.render() 
@@ -84,7 +79,7 @@ def eval_agent(policy, args, i_eval, file_name):
             if episode_timesteps == args.max_steps:
                 done = True 
             if done == True:
-                success = True if (abs(eX) <= 0.005).all() else False
+                success = True if (abs(eX) <= 0.01).all() else False
                 success_count.append(success)
 
         # Save data:

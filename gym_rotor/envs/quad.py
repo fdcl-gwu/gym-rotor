@@ -20,8 +20,8 @@ class QuadEnv(gym.Env):
         self.d = 0.23 # arm length, [m]
         self.J = np.diag([0.02, 0.02, 0.04]) # inertia matrix of quad, [kg m2]
         self.c_tf = 0.0135 # torque-to-thrust coefficients
-        self.c_tw = 1.8 # thrust-to-weight coefficients
-        self.g = 9.81  # standard gravity
+        self.c_tw = 2.2 # thrust-to-weight coefficients
+        self.g = 9.81  # standard gravity, [m/s2]
 
         # Force and Moment:
         self.f = self.m * self.g # magnitude of total thrust to overcome  

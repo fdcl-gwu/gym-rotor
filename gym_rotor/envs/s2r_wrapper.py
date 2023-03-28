@@ -1,20 +1,14 @@
 import numpy as np
 from numpy import linalg
-from numpy.linalg import inv
 from numpy.random import uniform 
-from math import cos, sin, pi
-from scipy.integrate import odeint, solve_ivp
-from transforms3d.euler import euler2mat, mat2euler
+from math import pi
+from transforms3d.euler import euler2mat
 
 from gym_rotor.envs.quad_utils import *
 from gym_rotor.envs.quad import QuadEnv
 
 
 class Sim2RealWrapper(QuadEnv):
-
-    def __init__(self): 
-        super().__init__()
-        self.delayed_action = np.zeros(4)
 
     def reset(self, env_type='train'):
         # Reset states & Normalization:
@@ -43,9 +37,9 @@ class Sim2RealWrapper(QuadEnv):
         state[17] = uniform(size=1, low=-self.init_W_error, high=self.init_W_error) 
 
         # R, attitude:
-        pitch = uniform(size=1, low=-self.init_R_error, high=self.init_R_error)
         roll  = uniform(size=1, low=-self.init_R_error, high=self.init_R_error)
-        yaw   = uniform(size=1, low=-pi, high=pi) 
+        pitch = uniform(size=1, low=-self.init_R_error, high=self.init_R_error)
+        yaw   = uniform(size=1, low=-(pi-self.eps), high=(pi-self.eps)) 
         R = euler2mat(roll, pitch, yaw) 
         # Re-orthonormalize:
         if not isRotationMatrix(R):
@@ -70,30 +64,6 @@ class Sim2RealWrapper(QuadEnv):
 
         return np.array(self.state)
 
-    """
-    def action_wrapper(self, action):
-        self.total_iter += 1
-        if self.total_iter % self.action_update_freq == 0:
-
-            # Linear scale, [-1, 1] -> [min_act, max_act] 
-            self.delayed_action = (
-                self.scale_act * action + self.avrg_act
-                ).clip(self.min_force, self.max_force)
-
-            # Saturated thrust of each motor:
-            self.f1 = self.delayed_action[0]
-            self.f2 = self.delayed_action[1]
-            self.f3 = self.delayed_action[2]
-            self.f4 = self.delayed_action[3]
-
-            # Convert each forces to force-moment:
-            self.fM = self.forces_to_fM @ self.delayed_action
-            self.f = self.fM[0]   # [N]
-            self.M = self.fM[1:4] # [Nm]  
-
-
-        return self.delayed_action
-    """
 
     def set_random_parameters(self, env_type='train'):
         # Nominal quadrotor parameters:
@@ -121,25 +91,11 @@ class Sim2RealWrapper(QuadEnv):
             J3 = uniform(low=(J3 - J3_range), high=(J3 + J3_range))
             self.J  = np.diag([J1, J2, J3]) # [kg m2]
             self.c_tf = uniform(low=(self.c_tf - c_tf_range), high=(self.c_tf + c_tf_range))
-            self.c_tw = uniform(low=(self.c_tw - c_tw_range), high=(self.c_tw + c_tw_range))
-            
-            """
-            # Frequency of “Delayed” action updates
-            '''
-            Example) If `self.freq = 300 # frequency [Hz]`,
-            self.action_update_freq = 1    -> 300 Hz
-            self.action_update_freq = 1.5  -> 200 Hz
-            self.action_update_freq = 2    -> 150 Hz
-            self.action_update_freq = 3    -> 100 Hz
-            '''
-            self.action_update_freq = 1
-            # self.action_update_freq = uniform(size=1, low=1, high=2).max() # 100 Hz to 200 Hz
-            # Motor and Sensor noise: thrust_noise_ratio, sigma, cutoff_freq
-            """
+            self.c_tw = uniform(low=(self.c_tw - c_tw_range), high=(self.c_tw + c_tw_range))            
 
         # Force and Moment:
         self.f = self.m * self.g # magnitude of total thrust to overcome  
-                                    # gravity and mass (No air resistance), [N]
+                                 # gravity and mass (No air resistance), [N]
         self.hover_force = self.m * self.g / 4.0 # thrust magnitude of each motor, [N]
         self.max_force = self.c_tw * self.hover_force # maximum thrust of each motor, [N]
         self.fM = np.zeros((4, 1)) # Force-moment vector
@@ -152,3 +108,5 @@ class Sim2RealWrapper(QuadEnv):
         self.fM_to_forces = np.linalg.inv(self.forces_to_fM)
         self.avrg_act = (self.min_force+self.max_force)/2.0 
         self.scale_act = self.max_force-self.avrg_act # actor scaling
+
+        print('m:',f'{self.m:.3f}','d:',f'{self.d:.3f}','J:',f'{J1:.4f}',f'{J3:.4f}','c_tf:',f'{self.c_tf:.4f}','c_tw:',f'{self.c_tw:.3f}')

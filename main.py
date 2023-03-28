@@ -3,8 +3,6 @@ import sys
 import torch
 import argparse
 import numpy as np
-from numpy import linalg
-from datetime import datetime
 
 import gym
 import gym_rotor
@@ -15,7 +13,7 @@ import algos.TD3 as TD3
 import algos.TD3_CAPS as TD3_CAPS
 import utils.replay_buffer as replay
 from utils.eval_agent import eval_agent
-from utils.ctrl_utils import *
+from utils.equiv_utils import *
 
 if __name__ == "__main__":
 	
@@ -29,24 +27,24 @@ if __name__ == "__main__":
                     help='Load trained models and save log(default: False)')      
     parser.add_argument("--eval_freq", default=1e4, type=int,
                     help='How often (time steps) evaluate our trained model')       
-    parser.add_argument('--seed', default=123, type=int, metavar='N',
-                    help='Random seed of Gym, PyTorch and Numpy (default: 123)')      
+    parser.add_argument('--seed', default=1234, type=int, metavar='N',
+                    help='Random seed of Gym, PyTorch and Numpy (default: 1234)')      
     # Args of Environment:
     parser.add_argument('--env_id', default="Quad-v0",
                     help='Name of OpenAI Gym environment (default: Quad-v0)')
     parser.add_argument('--wrapper_id', default="",
                     help='Name of wrapper: Sim2RealWrapper')    
     parser.add_argument('--aux_id', default="",
-                    help='Name of auxiliary technique: EquivWrapper, CtrlSatWrapper')    
-    parser.add_argument('--max_steps', default=2000, type=int,
-                    help='Maximum number of steps in each episode (default: 2000)')
+                    help='Name of auxiliary technique: EquivWrapper')    
+    parser.add_argument('--max_steps', default=4000, type=int,
+                    help='Maximum number of steps in each episode (default: 4000)')
     parser.add_argument('--max_timesteps', default=int(6e6), type=int,
                     help='Number of total timesteps (default: 3e6)')
     parser.add_argument('--render', default=False, type=bool,
                     help='Simulation visualization (default: False)')
     # Args of Agents:
     parser.add_argument("--policy", default="TD3_CAPS",
-                    help='Which algorithms? DDPG or TD3 or TD3_CAPS(default: TD3)')
+                    help='Which algorithms? DDPG or TD3 or TD3_CAPS (default: TD3)')
     parser.add_argument("--actor_hidden_dim", default=16, type=int, 
                     help='Number of nodes in hidden layers of actor net (default: 64)')
     parser.add_argument("--critic_hidden_dim", default=512, type=int, 
@@ -178,13 +176,10 @@ if __name__ == "__main__":
             action = (
                 action + np.random.normal(0, args.act_noise, size=action_dim)
             ).clip(min_act, max_act) # add exploration noise
-        # Control input saturation:
-        eX = np.round(state[0:3]*env.x_lim, 5) # position error [m]
-        if args.aux_id == "CtrlSatWrapper":
-            action = ctrl_sat(action, eX, min_act, max_act, env)
 
         # Perform action:
         next_state, reward, done, _ = env.step(action)
+        eX = np.round(state[0:3]*env.x_lim, 5) # position error [m]
 
         if args.aux_id == "EquivWrapper":
             next_state_equiv = rot_e3(next_state)
