@@ -8,15 +8,8 @@ from transforms3d.euler import euler2mat, mat2euler
 
 from gym_rotor.envs.quad import QuadEnv
 from gym_rotor.envs.quad_utils import *
-from gym_rotor.wrappers.sensor_noise import SensorNoise
-
 
 class Sim2RealWrapper(QuadEnv):
-
-    def __init__(self): 
-        super().__init__()
-        self.motor_init_has_run = False
-        self.sensor_noise = SensorNoise(bypass=False)
 
     def reset(self, env_type='train'):
         # Initial states:
@@ -76,14 +69,3 @@ class Sim2RealWrapper(QuadEnv):
         self.scale_act = self.max_force-self.avrg_act # actor scaling
 
         print('m:',f'{self.m:.3f}','d:',f'{self.d:.3f}','J:',f'{J1:.4f}',f'{J3:.4f}','c_tf:',f'{self.c_tf:.4f}','c_tw:',f'{self.c_tw:.3f}')
-
-
-    def set_noise(self, env_type='train'):
-        self.motor_init_has_run = False
-
-        if env_type == 'train':
-            self.motor_noise = True
-            self.sensor_noise = SensorNoise(bypass=False)
-        elif env_type == 'eval':  
-            self.motor_noise = False
-            self.sensor_noise = SensorNoise(bypass=True)
