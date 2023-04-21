@@ -5,7 +5,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import CyclicLR, OneCycleLR
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+    print("CUDA found.")
+elif torch.backends.mps.is_available():
+    device = torch.device("mps")
+    print("MPS found.")
+else:
+    device = torch.device("cpu")
 
 class Actor(nn.Module):
     def __init__(self, state_dim, action_dim, actor_hidden_dim):
@@ -157,13 +164,13 @@ class TD3_CAPS(object):
             actor_loss = -self.critic.Q1(state, clipped_action).mean()
             
             # Regularizing action policies for smooth control
-            lam_T = 0.3 # 0.5 - 0.8
+            lam_T = 0.2 #0.3 # 0.5 - 0.8
             if lam_T > 0: # Temporal Smoothness
                 next_action_T = (self.actor(next_state)).clamp(self.min_act, self.max_act) 
                 Loss_T = F.mse_loss(clipped_action, next_action_T)
                 actor_loss += lam_T * Loss_T
 
-            lam_S = 0.3 # 0.3 - 0.5
+            lam_S = 0.1 #0.3 # 0.3 - 0.5
             if lam_S > 0: # Spatial Smoothness
                 noise_S = (
                     torch.normal(mean=0., std=0.05, size=(1, self.action_dim))
@@ -172,7 +179,7 @@ class TD3_CAPS(object):
                 Loss_S = F.mse_loss(clipped_action, action_bar)
                 actor_loss += lam_S * Loss_S
 
-            lam_M = 0.4 # 0.2 - 0.5
+            lam_M = 0.2 #0.3 #0.4 # 0.2 - 0.5
             if lam_M > 0: # Magnitude Smoothness
                 hover_action = np.interp(
                     self.hover_force, [self.min_force, self.max_force], [self.min_act, self.max_act]

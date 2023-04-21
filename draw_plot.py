@@ -11,10 +11,10 @@ import matplotlib.pyplot as plt
 plt.style.use('seaborn')
 plt.rcParams['lines.linewidth'] = 1.5
 plt.rcParams['font.size'] = 18
-fontsize = 32
+fontsize = 25
 
 # Data load and indexing:
-file_name = 'log_17h_33m_17s'
+file_name = 'log_04212023_135215'
 log_date = np.loadtxt(os.path.join('./results', file_name + '.dat')) 
 start_index = 3
 end_index = len(log_date)
@@ -23,7 +23,7 @@ is_SAVE = True
 # Pre-processing:
 env = gym.make("Quad-v0")
 t = np.arange(end_index - start_index)*env.dt # time [sec]
-time_now = datetime.now().strftime("%Hh_%Mm_%Ss")
+time_now = datetime.now().strftime("%m%d%Y_%H%M%S") 
 
 load_act  = log_date[:, 0:4] # automatically discards the headers
 load_obs  = log_date[:, 4:22] 
@@ -53,7 +53,7 @@ Wd1, Wd2, Wd3 = cmd[:, 9]*env.W_lim, cmd[:, 10]*env.W_lim, cmd[:, 11]*env.W_lim
 #######################################################################
 ############################# Plot Forces #############################
 #######################################################################
-fig, axs = plt.subplots(4, figsize=(25, 12))
+fig, axs = plt.subplots(4, figsize=(30, 12))
 axs[0].plot(t, f1, linewidth=3)
 axs[0].set_ylabel('$T_1$ [N]', size=fontsize)
 
@@ -81,12 +81,12 @@ for label in (axs[2].get_xticklabels() + axs[2].get_yticklabels()):
 for label in (axs[3].get_xticklabels() + axs[3].get_yticklabels()):
 	label.set_fontsize(fontsize)
 if is_SAVE:
-    plt.savefig(os.path.join('./results', time_now+'_1_T'+'.png'), bbox_inches='tight')
+    plt.savefig(os.path.join('./results', time_now+'_T'+'.png'), bbox_inches='tight')
 
 ###################################################################################
 ############################# Plot States x, v, and W #############################
 ###################################################################################
-fig, axs = plt.subplots(3, 3, figsize=(25, 12))
+fig, axs = plt.subplots(3, 3, figsize=(30, 12))
 
 axs[0, 0].plot(t, xd1, 'tab:red', linewidth=3, label='$x_{d_1}$')
 axs[0, 0].plot(t, x1, linewidth=3, label='$x_1$')
@@ -161,12 +161,12 @@ for label in (axs[2, 1].get_xticklabels() + axs[2, 1].get_yticklabels()):
 for label in (axs[2, 2].get_xticklabels() + axs[2, 2].get_yticklabels()):
 	label.set_fontsize(fontsize)
 if is_SAVE:
-    plt.savefig(os.path.join('./results', time_now+'_2_x_v_W'+'.png'), bbox_inches='tight')
+    plt.savefig(os.path.join('./results', time_now+'_x_v_W'+'.png'), bbox_inches='tight')
 
 #########################################################################
 ############################# Plot States R #############################
 #########################################################################
-fig, axs = plt.subplots(3, 3, figsize=(25, 12))
+fig, axs = plt.subplots(3, 3, figsize=(30, 12))
 
 axs[0, 0].plot(t, b1d1, 'tab:red', linewidth=3, label='$b_{1d_1}$')
 axs[0, 0].plot(t, R11, linewidth=3, label='response')
@@ -243,6 +243,111 @@ for label in (axs[2, 2].get_xticklabels() + axs[2, 2].get_yticklabels()):
 	label.set_fontsize(fontsize)
 
 if is_SAVE:
-    plt.savefig(os.path.join('./results', time_now+'_3_R'+'.png'), bbox_inches='tight')
+    plt.savefig(os.path.join('./results', time_now+'_R'+'.png'), bbox_inches='tight')
+
+##########################################################################
+######################### Plot eX, eIX and eR ############################
+##########################################################################
+def vee(M):
+    '''Returns the vee map of a given 3x3 matrix.
+    Args:
+        x: (3x3 numpy array) hat of the input vector
+    Returns:
+        (3x1 numpy array) vee map of the input matrix
+    '''
+    vee_M = np.array([M[2,1], M[0,2], M[1,0]])
+
+    return vee_M
+
+eR = np.zeros((t.size, 3))
+for i in range(t.size):
+    R_vec = np.array([[obs[i, 6],   obs[i, 7],  obs[i, 8]],
+                      [obs[i, 9],   obs[i, 10], obs[i, 11]],
+                      [obs[i, 12],  obs[i, 13], obs[i, 14]]])
+    R = R_vec.reshape(3, 3, order='F')
+    Rd = np.eye(3)
+    Rd_T = Rd.T
+    RdtR = Rd_T@R
+    eR[i] = 0.5*vee(RdtR - RdtR.T) # attitude error vector
+
+
+class IntegralErrorVec3:
+    def __init__(self,):
+        self.error = np.zeros(3)
+        self.integrand = np.zeros(3)
+
+    def integrate(self, current_integrand, dt):
+        self.error += (self.integrand + current_integrand) * dt / 2.0
+        self.integrand = current_integrand
+
+    def set_zero(self):
+        self.error = np.zeros(3)
+        self.integrand = np.zeros(3)
+	
+sat_sigma = 3.
+eIX = IntegralErrorVec3() # Position integral error
+eIX.set_zero() # Set all integrals to zero
+eIX_vec = np.zeros((t.size, 3))
+for i in range(t.size):
+    eX = np.array([(x1 - xd1)[i], (x2 - xd2)[i], (x3 - xd3)[i]])
+    eIX.integrate(eX/env.x_lim, env.dt)
+    eIX.error = np.clip(eIX.error, -sat_sigma, sat_sigma)
+    # eIX.error = eIX.error
+    eIX_vec[i] = eIX.error
+
+fig, axs = plt.subplots(2, 3, figsize=(30, 12))
+axs[0, 0].plot(t, x1 - xd1, linewidth=3, label='$e_{x_1}$')
+axs[0, 0].set_ylabel('$e_{x_1}$ [m]', size=fontsize)
+
+axs[0, 1].plot(t, x2 - xd2, linewidth=3, label='$e_{x_2}$')
+axs[0, 1].set_ylabel('$e_{x_2}$ [m]', size=fontsize)
+
+axs[0, 2].plot(t, x3 - xd3, linewidth=3, label='$e_{x_3}$')
+axs[0, 2].set_ylabel('$e_{x_3}$ [m]', size=fontsize)
+
+axs[1, 0].plot(t, eIX_vec[:, 0], linewidth=3, label='$eI_{x_1}$')
+axs[1, 0].set_ylabel('$eI_{x_1}$', size=fontsize)
+
+axs[1, 1].plot(t, eIX_vec[:, 1], linewidth=3, label='$eI_{x_2}$')
+axs[1, 1].set_ylabel('$eI_{x_2}$', size=fontsize)
+
+axs[1, 2].plot(t, eIX_vec[:, 2], linewidth=3, label='$eI_{x_3}$')
+axs[1, 2].set_ylabel('$eI_{x_3}$', size=fontsize)
+
+# axs[2, 0].plot(t, eR[:, 0], linewidth=3, label='$e_{R_1}$')
+# axs[2, 0].set_ylabel('$e_{R_1}$', size=fontsize)
+
+# axs[2, 1].plot(t, eR[:, 1], linewidth=3, label='$e_{R_2}$')
+# axs[2, 1].set_ylabel('$e_{R_2}$', size=fontsize)
+
+# axs[2, 2].plot(t, eR[:, 2], linewidth=3, label='$e_{R_3}$')
+# axs[2, 2].set_ylabel('$e_{R_3}$', size=fontsize)
+
+for i in range(2):
+    for j in range(3):
+        axs[i, j].set_xlim([0., t[-1]])
+        axs[i, j].grid(True, color='white', linestyle='-', linewidth=1.0)
+        axs[i, j].legend(ncol=1, prop={'size': fontsize}, loc='lower right')
+        axs[i, j].locator_params(axis='y', nbins=4)
+for label in (axs[0, 0].get_xticklabels() + axs[0, 0].get_yticklabels()):
+	label.set_fontsize(fontsize)
+for label in (axs[0, 1].get_xticklabels() + axs[0, 1].get_yticklabels()):
+	label.set_fontsize(fontsize)
+for label in (axs[0, 2].get_xticklabels() + axs[0, 2].get_yticklabels()):
+	label.set_fontsize(fontsize)
+for label in (axs[1, 0].get_xticklabels() + axs[1, 0].get_yticklabels()):
+	label.set_fontsize(fontsize)
+for label in (axs[1, 1].get_xticklabels() + axs[1, 1].get_yticklabels()):
+	label.set_fontsize(fontsize)
+for label in (axs[1, 2].get_xticklabels() + axs[1, 2].get_yticklabels()):
+	label.set_fontsize(fontsize)
+# for label in (axs[2, 0].get_xticklabels() + axs[2, 0].get_yticklabels()):
+# 	label.set_fontsize(fontsize)
+# for label in (axs[2, 1].get_xticklabels() + axs[2, 1].get_yticklabels()):
+# 	label.set_fontsize(fontsize)
+# for label in (axs[2, 2].get_xticklabels() + axs[2, 2].get_yticklabels()):
+# 	label.set_fontsize(fontsize)
+if is_SAVE:
+    plt.savefig(os.path.join('./results', time_now+'_eX_eIX_eR'+'.png'), bbox_inches='tight')
 else:
     plt.show()

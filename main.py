@@ -6,14 +6,16 @@ import numpy as np
 
 import gym
 import gym_rotor
-from gym_rotor.envs.s2r_wrapper import Sim2RealWrapper
+from gym_rotor.envs.quad_utils import *
+from gym_rotor.wrappers.s2r_wrapper import Sim2RealWrapper
+from gym_rotor.wrappers.equiv_wrapper import EquivWrapper
+from gym_rotor.wrappers.equiv_utils import *
 
 import algos.DDPG as DDPG
 import algos.TD3 as TD3
 import algos.TD3_CAPS as TD3_CAPS
 import utils.replay_buffer as replay
 from utils.eval_agent import eval_agent
-from utils.equiv_utils import *
 
 if __name__ == "__main__":
 	
@@ -35,17 +37,17 @@ if __name__ == "__main__":
     parser.add_argument('--wrapper_id', default="",
                     help='Name of wrapper: Sim2RealWrapper')    
     parser.add_argument('--aux_id', default="",
-                    help='Name of auxiliary technique: EquivWrapper')    
+                    help='Name of auxiliary technique: EquivWrapper, eRWrapper')    
     parser.add_argument('--max_steps', default=4000, type=int,
-                    help='Maximum number of steps in each episode (default: 4000)')
-    parser.add_argument('--max_timesteps', default=int(6e6), type=int,
+                    help='Maximum number of steps in each episode (default: 2000)')
+    parser.add_argument('--max_timesteps', default=int(10e6), type=int,
                     help='Number of total timesteps (default: 3e6)')
     parser.add_argument('--render', default=False, type=bool,
                     help='Simulation visualization (default: False)')
     # Args of Agents:
     parser.add_argument("--policy", default="TD3_CAPS",
-                    help='Which algorithms? DDPG or TD3 or TD3_CAPS (default: TD3)')
-    parser.add_argument("--actor_hidden_dim", default=16, type=int, 
+                    help='Which algorithms? DDPG or TD3 or TD3_CAPS(default: TD3)')
+    parser.add_argument("--actor_hidden_dim", default=8, type=int, 
                     help='Number of nodes in hidden layers of actor net (default: 64)')
     parser.add_argument("--critic_hidden_dim", default=512, type=int, 
                     help='Number of nodes in hidden layers of critic net (default: 256)')
@@ -65,12 +67,12 @@ if __name__ == "__main__":
                     help='Stddev for smoothing noise added to target policy (default: 0.2)')
     parser.add_argument("--noise_clip", default=0.5, type=float,
                     help='Clipping range of target policy smoothing noise (default: 0.5)')
-    parser.add_argument('--policy_update_freq', default=8, type=int, metavar='N',
+    parser.add_argument('--policy_update_freq', default=4, type=int, metavar='N',
                         help='Frequency of “Delayed” policy updates (default: 2)')
     # Args of Replay buffer:
     parser.add_argument('--batch_size', default=256, type=int, metavar='N',
                         help='Batch size of actor and critic networks (default: 256)')
-    parser.add_argument('--replay_buffer_size', default=int(1e6), type=int, metavar='N',
+    parser.add_argument('--replay_buffer_size', default=int(3e6), type=int, metavar='N',
                         help='Maximum size of replay buffer (default: 1e6)')
     args = parser.parse_args()
 
@@ -85,6 +87,8 @@ if __name__ == "__main__":
     # Make OpenAI Gym environment:
     if args.wrapper_id == "Sim2RealWrapper":
         env = Sim2RealWrapper()
+    elif args.aux_id == "EquivWrapper":
+        env = EquivWrapper()
     else:
         env = gym.make(args.env_id)
 
@@ -92,6 +96,7 @@ if __name__ == "__main__":
     if args.seed:
         env.seed(args.seed)
         env.action_space.seed(args.seed)
+        env.observation_space.seed(args.seed)
         torch.manual_seed(args.seed)
         np.random.seed(args.seed)
 
@@ -105,6 +110,8 @@ if __name__ == "__main__":
     state_dim = env.observation_space.shape[0]
     if args.aux_id == "EquivWrapper":
         state_dim -= 1 # (_x1, _x3, _v1, _v2, _v3)
+    elif args.aux_id == "eRWrapper":
+        state_dim += 3 # (ex, ev, eR, R, eW)
     action_dim = env.action_space.shape[0] 
     min_act = env.action_space.low[0]
     max_act = env.action_space.high[0]
@@ -154,16 +161,43 @@ if __name__ == "__main__":
     log_eval = open(log_eval_path,"w+")  # Total timesteps vs. Evaluated average reward
 
     # Initialize environment:
-    state, done = env.reset(env_type='train'), False
     i_episode, episode_timesteps, episode_reward = 0, 0, 0
     max_total_reward = -1e9 # to save best models
+    state, done = env.reset(env_type='train'), False
+    if args.aux_id == "EquivWrapper":
+        '''
+        x_equiv, _, _, _ = equiv_state_decomposition(state)
+        b1d_equiv = np.append(x_equiv[:2], 0.) / np.linalg.norm(x_equiv[:2])
+        '''
+        '''
+        _, _, R, _ = state_decomposition(state)
+        b1d = get_current_b1(R) # desired heading direction
+        '''
+        b1d = np.array([1., 0., 0.])
+    elif args.aux_id == "eRWrapper":
+        x, v, R, W = state_decomposition(state)
+        Rd = get_current_Rd(R)
+    else:
+        b1d = np.array([1., 0., 0.])
 
     # Training loop:
     for total_timesteps in range(int(args.max_timesteps)):
         episode_timesteps += 1
 
         if args.aux_id == "EquivWrapper":
-            state_equiv = rot_e3(state)
+            # state_equiv = equiv_state(state, b1d)
+            state_equiv = equiv_state(state)
+            '''
+            _, _, R_equiv, _ = equiv_state_decomposition(state)
+            eR = ang_btw_two_vectors(get_current_b1(R_equiv), b1d_equiv) # heading error [rad]
+            '''
+            x, v, R, W = state_decomposition(state)
+            eR = ang_btw_two_vectors(get_current_b1(R), b1d) # heading error [rad]
+        elif args.aux_id == "eRWrapper":
+            RdT_R = Rd.T @ R
+            eR = 0.5 * vee(RdT_R - RdT_R.T).flatten()
+            R_vec = R.reshape(9, 1, order='F').flatten()
+            state_eR = np.concatenate((x, v, R_vec, eR, W), axis=0)
 
         # Select action randomly or from policy:
         if total_timesteps < args.start_timesteps:
@@ -171,6 +205,8 @@ if __name__ == "__main__":
         else:
             if args.aux_id == "EquivWrapper":
                 action = policy.select_action(np.array(state_equiv))
+            elif args.aux_id == "eRWrapper":
+                action = policy.select_action(np.array(state_eR))
             else:
                 action = policy.select_action(np.array(state))
             action = (
@@ -182,7 +218,19 @@ if __name__ == "__main__":
         eX = np.round(state[0:3]*env.x_lim, 5) # position error [m]
 
         if args.aux_id == "EquivWrapper":
-            next_state_equiv = rot_e3(next_state)
+            # next_state_equiv = equiv_state(next_state, b1d)
+            next_state_equiv = equiv_state(next_state)
+            x, v, R, W = state_decomposition(next_state)
+            eR = ang_btw_two_vectors(get_current_b1(R), b1d) # heading error [rad]
+        elif args.aux_id == "eRWrapper":
+            x, v, R, W = state_decomposition(next_state)
+            RdT_R = Rd.T @ R
+            eR = 0.5 * vee(RdT_R - RdT_R.T).flatten()
+            R_vec = R.reshape(9, 1, order='F').flatten()
+            next_state_eR = np.concatenate((x, v, R_vec, eR, W), axis=0)
+        else:
+            _, _, R, _ = state_decomposition(next_state)
+            eR = ang_btw_two_vectors(get_current_b1(R), b1d) # heading error [rad]
 
         # 3D visualization:
         if args.render == True:
@@ -192,12 +240,14 @@ if __name__ == "__main__":
         done_bool = float(done) if episode_timesteps < args.max_steps else 0.
         if episode_timesteps == args.max_steps: # Episode terminated!
             done = True
-            if (abs(eX) <= 0.005).all(): # Problem is solved!
+            if (abs(eX) <= 0.1).all(): # Problem is solved!
                 done_bool = 1.
 
         # Store a set of transitions in replay buffer
         if args.aux_id == "EquivWrapper":
             replay_buffer.add(state_equiv, action, next_state_equiv, reward, done_bool)
+        elif args.aux_id == "eRWrapper":
+            replay_buffer.add(state_eR, action, next_state_eR, reward, done_bool)
         else:
             replay_buffer.add(state, action, next_state, reward, done_bool)
 
@@ -209,7 +259,7 @@ if __name__ == "__main__":
         episode_reward += reward
 
         if done: 
-            print(f"Total-timestpes: {total_timesteps+1}, #Episode: {i_episode+1}, timestpes: {episode_timesteps}, Reward: {episode_reward:.3f}, eX: {eX}")
+            print(f"Total-timestpes: {total_timesteps+1}, #Episode: {i_episode+1}, timestpes: {episode_timesteps}, Reward: {episode_reward:.3f}, eX: {eX}, eR: {np.round(eR, 5)}")
                         
             # Save best model:
             if episode_reward > max_total_reward:
@@ -228,6 +278,18 @@ if __name__ == "__main__":
 
             # Reset environment:
             state, done = env.reset(env_type='train'), False
+            if args.aux_id == "EquivWrapper":
+                '''
+                x_equiv, _, _, _ = equiv_state_decomposition(state)
+                b1d_equiv = np.append(x_equiv[:2], 0.) / np.linalg.norm(x_equiv[:2])
+                '''
+                '''
+                _, _, R, _ = state_decomposition(state)
+                b1d = get_current_b1(R) # desired heading direction
+                '''
+            elif args.aux_id == "eRWrapper":
+                x, v, R, W = state_decomposition(state)
+                Rd = get_current_Rd(R)
             episode_timesteps, episode_reward = 0, 0
             i_episode += 1 
 

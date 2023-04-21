@@ -1,7 +1,14 @@
 import numpy as np
 import torch
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+    print("CUDA found.")
+elif torch.backends.mps.is_available():
+    device = torch.device("mps")
+    print("MPS found.")
+else:
+    device = torch.device("cpu")
 
 class ReplayBuffer(object):
 	def __init__(self, state_dim, action_dim, replay_buffer_size):

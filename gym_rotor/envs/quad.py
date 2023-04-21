@@ -16,12 +16,12 @@ class QuadEnv(gym.Env):
 
     def __init__(self): 
         # Quadrotor parameters:
-        self.m = 1.85 # mass of quad, [kg]
+        self.m = 1.99 #1.85 # mass of quad, [kg]
         self.d = 0.23 # arm length, [m]
         self.J = np.diag([0.02, 0.02, 0.04]) # inertia matrix of quad, [kg m2]
         self.c_tf = 0.0135 # torque-to-thrust coefficients
         self.c_tw = 2.2 # thrust-to-weight coefficients
-        self.g = 9.81  # standard gravity, [m/s2]
+        self.g = 9.81  # standard gravity
 
         # Force and Moment:
         self.f = self.m * self.g # magnitude of total thrust to overcome  
@@ -59,10 +59,22 @@ class QuadEnv(gym.Env):
         self.eps = 1e-10
 
         # Coefficients in reward function:
-        self.C_X = 0.35 # pos coef.
-        self.C_R = 0.25 # att coef.
+        self.C_X = 5.0 # pos coef.
+        self.C_R = 1.5 # att coef.
         self.C_V = 0.15 # vel coef.
-        self.C_W = 0.25 # ang_vel coef.
+        self.C_W = 0.3 # ang_vel coef.
+        self.reward_alive = 5. # β ≥ 0 is a bonus value earned by the agent for staying alive
+        self.reward_crash = -10. # Out of boundry or crashed!
+
+        # Integral terms:
+        self.use_integral = True
+        self.sat_sigma = 3.
+        self.eIX = IntegralErrorVec3() # Position integral error
+        self.eIR = IntegralError() # Attitude integral error
+        self.eIX.set_zero() # Set all integrals to zero
+        self.eIR.set_zero()
+        self.CI_X = 0.005
+        self.CI_R = 0.  
 
         # Commands:
         self.xd     = np.array([0.0, 0.0, 0.0]) # desired tracking position command, [m] 
@@ -90,6 +102,7 @@ class QuadEnv(gym.Env):
             high=self.high, 
             dtype=np.float64
         )
+
         # Action space:
         self.action_space = spaces.Box(
             low=-1.0, 
@@ -118,12 +131,13 @@ class QuadEnv(gym.Env):
         obs = self.observation_wrapper(state)
 
         # Reward function:
-        reward = self.reward_wrapper(obs, action)
+        reward = self.reward_wrapper(obs)
 
         # Terminal condition:
         done = self.done_wrapper(obs)
         if done: # Out of boundry or crashed!
-            reward = -1.
+            reward = self.reward_crash
+        reward = np.interp(reward, [self.reward_crash, self.reward_alive], [-1., 1.]) # linear interpolation [-1,1]
 
         return obs, reward, done, {}
 
@@ -175,16 +189,16 @@ class QuadEnv(gym.Env):
         """
         # Re-orthonormalize:
         if not isRotationMatrix(R):
-            ''' https://www.codefull.net/2017/07/orthonormalize-a-rotation-matrix/ '''
-            u, s, vh = linalg.svd(R, full_matrices=False)
-            R = u @ vh
+            U, s, VT = psvd(R)
+            R = U @ VT.T
         R_vec = R.reshape(9, 1, order='F').flatten()
-        # self.b1d = get_current_b1(R) # desired heading direction     
+        
+        # self.b1d = get_current_b1(R) # desired heading direction 
+        # self.Rd  = get_current_Rd(R) # desired attitude
 
         # Normalization: [max, min] -> [-1, 1]
         x_norm, v_norm, _, W_norm = state_normalization(state, self.x_lim, self.v_lim, self.W_lim)
         self.state = np.concatenate((x_norm, v_norm, R_vec, W_norm), axis=0)
-        #self.b1d = rot_b1d(x_norm)   
 
         # Reset forces & moments:
         self.f  = self.m * self.g
@@ -193,6 +207,10 @@ class QuadEnv(gym.Env):
         self.f3 = self.hover_force
         self.f4 = self.hover_force
         self.M  = np.zeros(3)
+
+        # Integral terms:
+        self.eIX.set_zero() # Set all integrals to zero
+        self.eIR.set_zero()
 
         return np.array(self.state)
 
@@ -218,7 +236,6 @@ class QuadEnv(gym.Env):
 
 
     def observation_wrapper(self, state):
-
         # De-normalization: [-1, 1] -> [max, min]
         x, v, R, W = state_de_normalization(state, self.x_lim, self.v_lim, self.W_lim)
         R_vec = R.reshape(9, 1, order='F').flatten()
@@ -249,7 +266,7 @@ class QuadEnv(gym.Env):
         return self.state
     
 
-    def reward_wrapper(self, obs, action):
+    def reward_wrapper(self, obs):
         # Decomposing state vectors
         x, v, R, W = state_decomposition(obs)
 
@@ -258,46 +275,52 @@ class QuadEnv(gym.Env):
         C_R = self.C_R # att coef.
         C_V = self.C_V # vel coef.
         C_W = self.C_W # ang_vel coef.
+        CI_X = self.CI_X 
+        CI_R = self.CI_R 
 
         # Errors:
         eX = x - self.xd     # position error
         eV = v - self.xd_dot # velocity error
         # Heading errors:
-        '''
-        eR = angle_of_vectors(get_current_b1(R), self.b1d) # [rad], heading error
-        eR = np.interp(eR, [0., pi], [0., 1.0]) # normalized into [0,1]
-        '''
+        eR = ang_btw_two_vectors(get_current_b1(R), self.b1d) # [rad]
         # Attitude errors:
+        '''
         RdT_R = self.Rd.T @ R
         eR = 0.5*(np.eye(3) - RdT_R).trace() # eR = 0.5 * vee(RdT_R - RdT_R.T).flatten()
-        # To avoid `-log(0) = inf`:
-        """
-        eX = np.where(abs(eX)<=self.eps, eX*self.eps, eX)
-        eR = self.eps if eR<=self.eps else eR
-        """
+        eR *= 0.5 # [0,2] -> [0,1]
+        eR = 0.5 * vee(RdT_R - RdT_R.T).flatten()
         '''
-        eR = np.where(abs(eR)<=eps, eR*eps, eR)
+
+		#---- Calculate integral terms to steady-state errors ----#
+        # Position integral terms:
+        if self.use_integral:
+            self.eIX.integrate(eX, self.dt) # eX + eV
+            self.eIX.error = np.clip(self.eIX.error, -self.sat_sigma, self.sat_sigma)
+        else:
+            self.eIX.set_zero()
+        # Attitude integral terms:
+        '''
+        if self.use_integral:
+            self.eIR.integrate(eR, self.dt) # eR + eW
+            self.eIR.error = np.clip(self.eIR.error, -self.sat_sigma, self.sat_sigma)
+        else:
+            self.eIR.set_zero()
         '''
 
         # Reward function:
-        reward_eX = +C_X*max(0., (1.-(abs(eX)[0]**2))+(1.-(abs(eX)[1]**2))+(1.-0.6*(abs(eX)[2]**2)))
-        eR = np.interp(eR, [0., 2.], [0., 1.]) # normalized into [0,1]
-        reward_eR = +C_R*max(0., 1. - eR**2)
+        reward_eX = -C_X*(linalg.norm(eX, 2)**2) 
+        # reward_eX = -C_X*(abs(eX)[0]**2 + abs(eX)[1]**2 + 1.5*(abs(eX)[2]**2)) # 0.7
+        reward_eIX = -CI_X*(linalg.norm(self.eIX.error, 2)**2)
+        # reward_eIX = -CI_X*(abs(self.eIX.error)[0] + abs(self.eIX.error)[1] + (abs(self.eIX.error)[2]))
+        reward_eR  = -C_R*(eR/pi) # [0., pi] -> [0., 1.0]
+        reward_eIR = 0. #-CI_R*self.eIR.error
+        # reward_eR = -C_R*(np.nansum(eR)) # -C_R*(linalg.norm(eR, 2)**2)
+        # reward_eR = -C_R*abs(eR[2])
         reward_eV = -C_V*(linalg.norm(eV, 2)**2)
         reward_eW = -C_W*(linalg.norm(W, 2)**2)
-        """ Old version.
-        reward_eX = +C_X*max(0, -(np.log(abs(eX)[0])+np.log(abs(eX)[1])+0.6*np.log(abs(eX)[2])))
-        reward_eR = +C_R*max(0, -np.log(eR))
-        reward_eV = -C_V*linalg.norm(eV, 2)
-        reward_eW = -C_W*linalg.norm(W, 2)
-        """
-        '''
-        reward_eR = +C_R*max(0, -(np.log(abs(eR)[0])+np.log(abs(eR)[1])+np.log(abs(eR)[2])))
-        reward_eR = -C_R*np.sqrt(eR)
-        '''
 
-        reward = reward_eX + reward_eR + reward_eV + reward_eW
-        reward *= 0.1 # rescaled by a factor of 0.1
+        reward = self.reward_alive + (reward_eX + reward_eIX + reward_eR + reward_eIR + reward_eV + reward_eW)
+        #reward *= 0.1 # rescaled by a factor of 0.1
 
         return reward
 
