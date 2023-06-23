@@ -33,10 +33,43 @@ conda install -c conda-forge vpython
 git clone https://github.com/fdcl-gwu/gym-rotor.git
 ```
 
+## Environments
+Consider a quadrotor UAV below:
+
+<img src="https://github.com/fdcl-gwu/gym-rotor/assets/50692767/7d683754-fd60-41e0-a29f-12e26ea279a8" width=40%>
+
+The position and the velocity of the quadrotor are represented by $x \in \mathbb{R}^3$ and $v \in \mathbb{R}^3$, respectively.
+The attitude is defined by the rotation matrix $R \in SO(3) = \lbrace R \in \mathbb{R}^{3\times 3} | R^T R=I_{3\times 3}, \mathrm{det}[R]=1 \rbrace$, that is the linear transformation of the representation of a vector from the body-fixed frame $\lbrace \vec b_{1},\vec b_{2},\vec b_{3} \rbrace$ to the inertial frame $\lbrace \vec e_1,\vec e_2,\vec e_3 \rbrace$. 
+The angular velocity vector denoted by $\Omega \in \mathbb{R}^3$.
+From the thrust of each motor $(T_1,T_2,T_3,T_4)$, the total thrust $f = \sum{}_{i=1}^{4} T_i \in \mathbb{R}$ and the total moment $M \in \mathbb{R}^3$ resolved in the body-fixed frame can be represented.
+
+| Env IDs | Description |
+| :---: | --- |
+| `Quad-v0` | The state and the action are given by $s = (e_x, e_v, R, e_\Omega)$ and $a = (T_1, T_2, T_3, T_4)$.|
+| `Quad-v1` | The state and the action are given by $s = (e_x, eI_x, e_v, R, e_\Omega)$ and $a = (T_1, T_2, T_3, T_4)$.|
+
+where the error terms $e_x, e_v$, and $e_\Omega$ represent the errors in position, velocity, and angular velocity, respectively.
+Note that `Quad-v0` often suffers from a problem with steady-state errors in position, so we add an integral term $eI_x$ to `Quad-v1` to address this issue.
+
+### wrapper
+
+## Examples
 3. For example, training with TD3 can be run by
 ```bash
-python main.py --env_id Quad-v0 --policy TD3
+python main.py --env_id Quad-v1 --policy TD3
 ```
+
+## Citation
+If you find this work useful in your own work or would like to cite it, please give credit to our work:
+```bash
+@article{yu2022equivariant,
+  title={Equivariant Reinforcement Learning for Quadrotor UAV},
+  author={Yu, Beomyeol and Lee, Taeyoung},
+  journal={arXiv preprint arXiv:2206.01233},
+  year={2022}
+}
+```
+
 ## Reference:
 - https://github.com/openai/gym
 - https://github.com/ethz-asl/reinmav-gym
