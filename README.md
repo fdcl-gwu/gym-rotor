@@ -40,7 +40,7 @@ Consider a quadrotor UAV below:
 
 The position and the velocity of the quadrotor are represented by $x \in \mathbb{R}^3$ and $v \in \mathbb{R}^3$, respectively.
 The attitude is defined by the rotation matrix $R \in SO(3) = \lbrace R \in \mathbb{R}^{3\times 3} | R^T R=I_{3\times 3}, \mathrm{det}[R]=1 \rbrace$, that is the linear transformation of the representation of a vector from the body-fixed frame $\lbrace \vec b_{1},\vec b_{2},\vec b_{3} \rbrace$ to the inertial frame $\lbrace \vec e_1,\vec e_2,\vec e_3 \rbrace$. 
-The angular velocity vector denoted by $\Omega \in \mathbb{R}^3$.
+The angular velocity vector is denoted by $\Omega \in \mathbb{R}^3$.
 From the thrust of each motor $(T_1,T_2,T_3,T_4)$, the total thrust $f = \sum{}_{i=1}^{4} T_i \in \mathbb{R}$ and the total moment $M \in \mathbb{R}^3$ resolved in the body-fixed frame can be represented.
 
 | Env IDs | Description |
@@ -52,9 +52,15 @@ where the error terms $e_x, e_v$, and $e_\Omega$ represent the errors in positio
 Note that `Quad-v0` often suffers from a problem with steady-state errors in position, so we add an integral term $eI_x$ to `Quad-v1` to address this issue.
 
 ### wrapper
+This repo provides several useful wrappers that can be found in `./gym_rotor/wrappers/'.
+| Wrapper IDs | Description |
+| :---: | --- |
+| `Sim2RealWrapper` | [Domain randomization](https://lilianweng.github.io/posts/2019-05-05-domain-randomization/) and sensor noise are modeled for sim-to-real transfer.|
+| `EquivWrapper` | Rotation equivariance properties are implemented for sample efficiency. More details can be found [here](https://arxiv.org/abs/2206.01233).|
 
 ## Examples
-3. For example, training with TD3 can be run by
+Hyperparameters can be adjusted in `args_parse.py`.
+For example, training with TD3 can be run by
 ```bash
 python main.py --env_id Quad-v1 --policy TD3
 ```
