@@ -29,8 +29,8 @@ class Learner:
         if self.framework in ("CTDE","DTDE"):
             """--------------------------------------------------------------------------------------------------
             | Agents  | Observations           | obs_dim | Actions:       | act_dim | Rewards                   |
-            | #agent1 | {ex, ev, b3, w12, eIx} | 15      | {f_total, tau} | 4       | f(ex, ev, eb3, ew12, eIx) |
-            | #agent2 | {b1, eb1, W3, eIb1}    | 6       | {M3}           | 1       | f(eb1, eW3, eIb1)         |
+            | #agent1 | {ex, ev, b3, ew12, eIx} | 15      | {f_total, tau} | 4       | f(ex, ev, eb3, ew12, eIx) |
+            | #agent2 | {b1, eW3, eb1, eIb1}    | 6       | {M3}           | 1       | f(eb1, eW3, eIb1)         |
             --------------------------------------------------------------------------------------------------"""
             self.env = DecoupledWrapper()
             self.args.N = 2  # num of agents

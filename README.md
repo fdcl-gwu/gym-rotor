@@ -14,7 +14,7 @@ Please don't hesitate to create new issues or pull requests for any suggestions 
 
 ## Installation
 ### Requirements
-The repo was written with Python 3.11, Gymnasium 0.28.1, Pytorch 2.0.1, and Numpy 1.24.3.
+The repo was written with Python 3.11.3, Gymnasium 0.28.1, Pytorch 2.0.1, and Numpy 1.25.1.
 It is recommended to create [Anaconda](https://www.anaconda.com/) environment with Python 3.
 The official installation guide is available [here](https://docs.anaconda.com/anaconda/install/).
 [Visual Studio Code](https://code.visualstudio.com/) in ``Anaconda Navigator`` is highly recommended.
@@ -34,40 +34,65 @@ git clone https://github.com/fdcl-gwu/gym-rotor.git
 ```
 
 ## Environments
-Consider a quadrotor UAV below:
+Consider a quadrotor UAV below. The equations of motion are given by
 
 <img src="https://github.com/fdcl-gwu/gym-rotor/assets/50692767/7d683754-fd60-41e0-a29f-12e26ea279a8" width=40%>
 
 The position and the velocity of the quadrotor are represented by $x \in \mathbb{R}^3$ and $v \in \mathbb{R}^3$, respectively.
 The attitude is defined by the rotation matrix $R \in SO(3) = \lbrace R \in \mathbb{R}^{3\times 3} | R^T R=I_{3\times 3}, \mathrm{det}[R]=1 \rbrace$, that is the linear transformation of the representation of a vector from the body-fixed frame $\lbrace \vec b_{1},\vec b_{2},\vec b_{3} \rbrace$ to the inertial frame $\lbrace \vec e_1,\vec e_2,\vec e_3 \rbrace$. 
 The angular velocity vector is denoted by $\Omega \in \mathbb{R}^3$.
-From the thrust of each motor $(T_1,T_2,T_3,T_4)$, the total thrust $f = \sum{}_{i=1}^{4} T_i \in \mathbb{R}$ and the total moment $M \in \mathbb{R}^3$ resolved in the body-fixed frame can be represented.
+Given the total thrust $f = \sum{}_{i=1}^{4} T_i \in \mathbb{R}$ and the moment $M = [M_1, M_2, M_3]^T \in \mathbb{R}^3$ resolved in the body-fixed frame, the thrust of each motor $(T_1,T_2,T_3,T_4)$ is determined by
+
+$$ \begin{gather} 
+    \begin{bmatrix} 
+        T_1 \\\ T_2 \\\ T_3 \\\ T_4
+    \end{bmatrix}
+    = \frac{1}{4}
+    \begin{bmatrix}
+        1 & 0      & 2/d   & -1/c_{\tau f} \\
+        1 & -2/d & 0      & 1/c_{\tau f} \\
+        1 & 0      & -2/d & -1/c_{\tau f} \\
+        1 & 2/d   & 0      & 1/c_{\tau f} 
+    \end{bmatrix}
+    \begin{bmatrix}
+        f \\\ M_1 \\\ M_2 \\\ M_3 
+    \end{bmatrix}.
+\end{gather} $$
 
 | Env IDs | Description |
 | :---: | --- |
-| `Quad-v0` | The state and the action are given by $s = (e_x, e_v, R, e_\Omega)$ and $a = (T_1, T_2, T_3, T_4)$.|
-| `Quad-v1` | The state and the action are given by $s = (e_x, eI_x, e_v, R, e_\Omega)$ and $a = (T_1, T_2, T_3, T_4)$.|
+| `Quad-v0` | This serves as the foundational env for wrappers, where the state and action are represented as $s = (x, v, R, \Omega)$ and $a = (T_1, T_2, T_3, T_4)$.|
+| `CoupledWrapper` | For single-agent RL frameworks; the observation and action are given by $o = (e_x, e_v, R, e_\Omega, e_{I_x}, e_{b_1}, e_{I_{b_1}})$ and $a = (f, M_1, M_2, M_3)$.|
+| `DecoupledWrapper` | For multi-agent RL frameworks; the observation and action for each agent are defined as $o_1 = (e_x, e_v, b_3, e_{\omega_{12}}, e_{I_x})$, $a_1 = (f, \tau)$ and $o_2 = (b_1, e_{\Omega_3}, e_{b_1}, e_{I_{b_1}})$, $a_2 = M_3$, respectively.|
 
 where the error terms $e_x, e_v$, and $e_\Omega$ represent the errors in position, velocity, and angular velocity, respectively.
-Note that `Quad-v0` often suffers from a problem with steady-state errors in position, so we add an integral term $eI_x$ to `Quad-v1` to address this issue.
+To eliminate steady-state errors, we add the integral terms $e_{I_x}$ and $e_{I_{b_1}}$.
+More details can be found [here](https://arxiv.org/abs/2311.06144).
 
-### wrapper
+<!-- ### wrapper
 This repo provides several useful wrappers that can be found in `./gym_rotor/wrappers/'.
 | Wrapper IDs | Description |
 | :---: | --- |
 | `Sim2RealWrapper` | [Domain randomization](https://lilianweng.github.io/posts/2019-05-05-domain-randomization/) and sensor noise are modeled for sim-to-real transfer.|
-| `EquivWrapper` | Rotation equivariance properties are implemented for sample efficiency. More details can be found [here](https://arxiv.org/abs/2206.01233).|
+| `EquivWrapper` | Rotation equivariance properties are implemented for sample efficiency. More details can be found [here](https://arxiv.org/abs/2206.01233).| -->
 
 ## Examples
 Hyperparameters can be adjusted in `args_parse.py`.
-For example, training with TD3 can be run by
+For example, training with the CTDE framework can be run by
 ```bash
-python main.py --env_id Quad-v1 --policy TD3
+python3 main.py --framework CTDE --seed 789
 ```
 
 ## Citation
 If you find this work useful in your own work or would like to cite it, please give credit to our work:
 ```bash
+@article{yu2023multi,
+  title={Multi-Agent Reinforcement Learning for the Low-Level Control of a Quadrotor UAV},
+  author={Yu, Beomyeol and Lee, Taeyoung},
+  journal={arXiv preprint arXiv:2311.06144},
+  year={2023}
+}
+
 @article{yu2022equivariant,
   title={Equivariant Reinforcement Learning for Quadrotor UAV},
   author={Yu, Beomyeol and Lee, Taeyoung},
@@ -77,6 +102,5 @@ If you find this work useful in your own work or would like to cite it, please g
 ```
 
 ## Reference:
-- https://github.com/openai/gym
 - https://github.com/ethz-asl/reinmav-gym
-- https://github.com/sfujim/TD3
+- https://github.com/Lizhi-sjtu/MARL-code-pytorch
