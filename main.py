@@ -1,303 +1,329 @@
 import os
 import sys
+import copy
 import torch
-import argparse
 import numpy as np
+import gymnasium as gym
+from datetime import datetime
 
-import gym
 import gym_rotor
 from gym_rotor.envs.quad_utils import *
-from gym_rotor.wrappers.s2r_wrapper import Sim2RealWrapper
-from gym_rotor.wrappers.equiv_wrapper import EquivWrapper
-from gym_rotor.wrappers.equiv_utils import *
+from gym_rotor.wrappers.decoupled_yaw_wrapper import DecoupledWrapper
+from gym_rotor.wrappers.coupled_yaw_wrapper import CoupledWrapper
+from utils.utils import *
+from utils.trajectory_generation import TrajectoryGeneration
+from algos.replay_buffer import ReplayBuffer
+from algos.matd3 import MATD3
+from algos.td3 import TD3
+import args_parse
 
-import algos.DDPG as DDPG
-import algos.TD3 as TD3
-import algos.TD3_CAPS as TD3_CAPS
-import utils.replay_buffer as replay
-from utils.eval_agent import eval_agent
+# Create directories:    
+os.makedirs("./models") if not os.path.exists("./models") else None 
+os.makedirs("./results") if not os.path.exists("./results") else None
 
-if __name__ == "__main__":
-	
+class Learner:
+    def __init__(self, args):
+        # Make a new OpenAI Gym environment:
+        self.args = args
+        self.framework = self.args.framework
+        if self.framework in ("CTDE","DTDE"):
+            """--------------------------------------------------------------------------------------------------
+            | Agents  | Observations           | obs_dim | Actions:       | act_dim | Rewards                   |
+            | #agent1 | {ex, ev, b3, w12, eIx} | 15      | {f_total, tau} | 4       | f(ex, ev, eb3, ew12, eIx) |
+            | #agent2 | {b1, eb1, W3, eIb1}    | 6       | {M3}           | 1       | f(eb1, eW3, eIb1)         |
+            --------------------------------------------------------------------------------------------------"""
+            self.env = DecoupledWrapper()
+            self.args.N = 2  # num of agents
+            self.args.obs_dim_n = [15, 6]
+            self.args.action_dim_n = [4, 1]
+        elif self.framework == "SARL":
+            """------------------------------------------------------------------------------------------------------------------
+            | Agents  | Observations                    | obs_dim | Actions:     | act_dim | Rewards                            |
+            | #agent1 | {ex, ev, R, eW, eIx, eb1, eIb1} | 23      | {f_total, M} | 4       | f(ex, ev, eb1, eb3, eW, eIx, eIb1) |
+            ------------------------------------------------------------------------------------------------------------------"""
+            self.env = CoupledWrapper()
+            self.args.N = 1  # num of agents
+            self.args.obs_dim_n = [23]
+            self.args.action_dim_n = [4]
+        
+        # Set seed for random number generators:
+        self.seed = self.args.seed
+        np.random.seed(self.seed)
+        torch.manual_seed(self.seed)
+        self.env.action_space.seed(self.seed)
+        self.env.observation_space.seed(self.seed)
+
+        # Initialize the training loop:
+        self.total_timesteps = 0  # total num of timesteps
+        self.eval_max_steps = self.args.eval_max_steps / self.env.dt  # max num of steps during evaluation; [sec] -> [timestep]
+        self.trajectory = TrajectoryGeneration(self.env)  # generate trajectories for evaluation
+        if self.args.use_explor_noise_decay:
+            self.noise_std_decay = (self.args.explor_noise_std_init - self.args.explor_noise_std_min) / self.args.explor_noise_decay_steps
+            self.explor_noise_std = self.args.explor_noise_std_init  # initialize explor_noise_std
+
+        # Initialize N agents:
+        if self.framework == "CTDE":
+            self.agent_n = [MATD3(args, agent_id) for agent_id in range(self.args.N)]
+        elif self.framework in ("SARL", "DTDE"):
+            self.agent_n = [TD3(args, agent_id) for agent_id in range(self.args.N)]
+
+        # Initialize replay buffer:
+        self.replay_buffer = ReplayBuffer(self.args)
+        
+        # Load trained models for evaluation:
+        if self.args.test_model:
+            if self.framework == "CTDE":
+                total_steps, agent_id = 2180_000, 0  # edit 'total_steps' accordingly
+                # self.agent_n[agent_id].load(self.framework, total_steps, agent_id, self.seed)  # test best models
+                self.agent_n[agent_id].load_solved_model(self.framework, total_steps, agent_id, self.seed)  # test solved models
+                total_steps, agent_id = 1440_000, 1  # edit 'total_steps' accordingly
+                # self.agent_n[agent_id].load(self.framework, total_steps, agent_id, self.seed)  # test best models 
+                self.agent_n[agent_id].load_solved_model(self.framework, total_steps, agent_id, self.seed)  # test solved models
+            if self.framework == "DTDE":
+                total_steps, agent_id = 1710_000, 0  # edit 'total_steps' accordingly
+                # self.agent_n[agent_id].load(self.framework, total_steps, agent_id, self.seed)
+                self.agent_n[agent_id].load_solved_model(self.framework, total_steps, agent_id, self.seed)
+                total_steps, agent_id = 1480_000, 1  # edit 'total_steps' accordingly
+                # self.agent_n[agent_id].load(self.framework, total_steps, agent_id, self.seed)
+                self.agent_n[agent_id].load_solved_model(self.framework, total_steps, agent_id, self.seed)
+            elif self.framework == "SARL":
+                total_steps, agent_id = 1580_000, 0  # edit 'total_steps' accordingly
+                # self.agent_n[agent_id].load(self.framework, total_steps, agent_id, self.seed)
+                self.agent_n[agent_id].load_solved_model(self.framework, total_steps, agent_id, self.seed)
+
+
+    def train_policy(self):
+        # Evaluate policies at the beginning before training:
+        self.eval_policy()
+
+        # Setup loggers:
+        log_step_path = os.path.join("./results", "log_step_seed_"+str(self.seed)+".txt")   
+        log_eval_path = os.path.join("./results", "log_eval_seed_"+str(self.seed)+".txt")
+        log_step = open(log_step_path,"w+")  # total reward during training w.r.t. total timesteps
+        log_eval = open(log_eval_path,"w+")  # total reward during evaluation w.r.t. total timesteps
+
+        # Initialize the environment:
+        obs_n, done_episode, b1d = self.env.reset(env_type='train', seed=self.seed), False, self.env.b1d
+        max_total_reward = [0.8 * self.eval_max_steps, 0.8 * self.eval_max_steps]  # starte saving best models after agents achieve 80% of the total reward for each episode
+        if self.framework in ("CTDE","DTDE"):
+            episode_reward = [0.,0.]
+        elif self.framework == "SARL":
+            episode_reward = [0.]
+        episode_timesteps = 0
+
+        # Training loop:
+        for self.total_timesteps in range(int(self.args.max_timesteps)):
+            self.total_timesteps += 1
+            episode_timesteps += 1
+
+            # Each agent selects actions based on its own local observations with exploration noise:
+            if self.total_timesteps < self.args.start_timesteps:  # select actions randomly
+                act_n = [np.random.rand(action_dim_n) * 2 - 1 for action_dim_n in self.args.action_dim_n]  # random actions between -1 and 1
+            else:  # select actions from trained policies
+                act_n = [agent.choose_action(obs, explor_noise_std=self.explor_noise_std) for agent, obs in zip(self.agent_n, obs_n)]
+            action = np.concatenate((act_n), axis=None)
+
+            # Perform actions in the environment:
+            obs_next_n, r_n, done_n, _, _ = self.env.step(copy.deepcopy(action))
+
+            # Episode termination:
+            state = self.env.get_current_state()
+            ex_m = np.round(state[0:3]*self.env.x_lim, 5)  # position error in [m]
+            eb1_rad = ang_btw_two_vectors(b1d, state[6:9])  # heading error in [rad]
+            if episode_timesteps == self.args.max_steps:  # episode terminated!
+                done_episode = True
+                done_n[0] = True if (abs(ex_m) <= 0.05).all() else False  # problem is solved! when ex < 0.05m
+                if self.framework in ("CTDE","DTDE"):
+                    done_n[1] = True if abs(eb1_rad) <= 0.03 else False  # problem is solved! when eb1 < 0.03rad
+        
+            # Store a set of transitions in replay buffer:
+            self.replay_buffer.store_transition(obs_n, act_n, r_n, obs_next_n, done_n)
+            episode_reward = [float('{:.4f}'.format(episode_reward[agent_id]+r)) for agent_id, r in zip(range(self.args.N), r_n)]
+            obs_n = obs_next_n
+
+            # Train agent after collecting sufficient data:
+            if self.total_timesteps > self.args.start_timesteps:
+                # Train each agent individually:
+                for agent_id in range(self.args.N):
+                    self.agent_n[agent_id].train(self.replay_buffer, self.agent_n, self.env)
+
+            # If done_episode:
+            if any(done_n) == True or done_episode == True:
+                print(f"total_timestpes: {self.total_timesteps+1}, time_stpes: {episode_timesteps}, reward: {episode_reward}, ex: {ex_m}, eb1: {eb1_rad:.3f}")
+
+                # Log data:
+                if self.total_timesteps >= self.args.start_timesteps:
+                    if self.framework in ("CTDE","DTDE"):
+                        log_step.write('{}\t {}\n'.format(self.total_timesteps, episode_reward))
+                    elif self.framework == "SARL":
+                        log_step.write('{}\t {}\n'.format(self.total_timesteps, episode_reward))
+                    log_step.flush()
+                
+                # Reset environment:
+                obs_n, done_episode, b1d = self.env.reset(env_type='train', seed=self.seed), False, self.env.b1d
+                if self.framework in ("CTDE","DTDE"):
+                    episode_reward = [0.,0.]
+                elif self.framework == "SARL":
+                    episode_reward = [0.]
+                episode_timesteps = 0
+
+            # Decay explor_noise_std:
+            if self.args.use_explor_noise_decay:
+                self.explor_noise_std = self.explor_noise_std - self.noise_std_decay if self.explor_noise_std > self.args.explor_noise_std_min else self.args.explor_noise_std_min
+
+            # Evaluate policy:
+            if self.total_timesteps % self.args.eval_freq == 0 and self.total_timesteps > self.args.start_timesteps:
+                eval_reward, benchmark_reward = self.eval_policy()
+
+                # Logging updates:
+                if self.framework in ("CTDE","DTDE"):
+                    log_eval.write('{}\t {}\t {}\n'.format(self.total_timesteps, benchmark_reward, eval_reward))
+                elif self.framework == "SARL":
+                    log_eval.write('{}\t {}\t {}\n'.format(self.total_timesteps, benchmark_reward, eval_reward))
+                log_eval.flush()
+
+                # Save best model:
+                for agent_id in range(self.args.N):
+                    if eval_reward[agent_id] > max_total_reward[agent_id]:
+                        max_total_reward[agent_id] = eval_reward[agent_id]
+                        self.agent_n[agent_id].save_model(self.framework, self.total_timesteps, agent_id, self.seed)
+
+        # Close environment:
+        self.env.close()
+
+
+    def eval_policy(self):
+        # Make OpenAI Gym environment for evaluation:
+        if self.framework in ("CTDE","DTDE"):
+            eval_env = DecoupledWrapper()
+        elif self.framework == "SARL":
+            eval_env = CoupledWrapper()
+
+        # Fixed seed is used for the eval environment:
+        seed = 123
+        eval_env.action_space.seed(seed)
+        eval_env.observation_space.seed(seed)
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+
+        # Save rewards and models:
+        success_count = []
+        if self.framework in ("CTDE","DTDE"):
+            success, eval_reward = [False,False], [0.,0.]
+        elif self.framework == "SARL":
+            success, eval_reward = [False], [0.]
+        benchmark_reward = 0. # Reward for benchmark
+
+        print("---------------------------------------------------------------------------------------------------------------------")
+        for num_eval in range(self.args.num_eval):
+            # Set mode for generating trajectory:
+            mode = 0
+            """ Mode List -----------------------------------------------
+            0 or 1: idle and warm-up (approach to xd = [0,0,0])
+            2: take-off
+            3: landing
+            4: stay (hovering)
+            5: circle
+            ----------------------------------------------------------"""
+            self.trajectory.mark_traj_start() # reset trajectory
+
+            # Data save:
+            act_list, obs_list, cmd_list = [], [], [] if args.save_log else None
+
+            # Reset envs, timesteps, and reward:
+            obs_n = eval_env.reset(env_type='eval', seed=self.seed)
+            if self.framework in ("CTDE","DTDE"):
+                episode_reward = [0.,0.]
+            elif self.framework == "SARL":
+                episode_reward = [0.]
+            episode_timesteps = 0
+            episode_benchmark_reward = 0.
+
+            # Evaluation loop:
+            for _ in range(int(self.eval_max_steps)):
+                episode_timesteps += 1
+
+                # Generate trajectory:
+                state = eval_env.get_current_state()
+                xd, vd, b1d, b3d, Wd = self.trajectory.get_desired(state, mode)
+                eval_env.set_goal_pos(xd, b1d)
+                error_obs_n, error_state = self.trajectory.get_error_state(self.framework)
+
+                # Actions without exploration noise:
+                act_n = [agent.choose_action(obs, explor_noise_std=0.) for agent, obs in zip(self.agent_n, error_obs_n)] # obs_n
+                action = np.concatenate((act_n), axis=None)
+
+                # Perform actions:
+                obs_next_n, r_n, done_n, _, _ = eval_env.step(copy.deepcopy(action))
+                state_next = eval_env.get_current_state()
+                eval_env.render() if self.args.render == True else None
+
+                # Cumulative rewards:
+                episode_reward = [float('{:.4f}'.format(episode_reward[agent_id]+r)) for agent_id, r in zip(range(self.args.N), r_n)]
+                episode_benchmark_reward += benchmark_reward_func(error_state, args)
+
+                # Save data:
+                if self.args.save_log:
+                    eIx, eb1, eIb1 = error_state[3], error_state[4], error_state[5]
+                    act_list.append(action)
+                    obs_list.append(np.concatenate((state, eIx, eb1, eIb1), axis=None))
+                    cmd_list.append(np.concatenate((xd, vd, b1d, b3d, Wd), axis=None))
+
+                # Episode termination:
+                if any(done_n) or episode_timesteps == self.eval_max_steps:
+                    ex_m = np.round(state[0:3]*self.env.x_lim, 5)  # position error [m]
+                    eb1_rad = ang_btw_two_vectors(b1d, state[6:9]) # heading error [rad]
+                    if self.framework in ("CTDE","DTDE"):
+                        success[0] = True if (abs(ex_m) <= 0.05).all() else False
+                        success[1] = True if abs(eb1_rad) <= 0.02 else False
+                    elif self.framework == "SARL":
+                        success[0] = True if (abs(ex_m) <= 0.05).all() else False
+                    print(f"eval_iter: {num_eval+1}, time_stpes: {episode_timesteps}, episode_reward: {episode_reward}, episode_benchmark_reward: {episode_benchmark_reward:.3f}, ex: {ex_m}, eb1: {eb1_rad:.3f}")
+                    success_count.append(success)
+                    break
+
+            # Compute total evaluation rewards:
+            eval_reward = [eval_reward[agent_id]+epi_r for agent_id, epi_r in zip(range(self.args.N), episode_reward)]
+            benchmark_reward += episode_benchmark_reward
+
+            # Save data:
+            if self.args.save_log:
+                min_len = min(len(act_list), len(obs_list), len(cmd_list))
+                log_data = np.column_stack((act_list[-min_len:], obs_list[-min_len:], cmd_list[-min_len:]))
+                header = "Actions and States\n"
+                header += "action[0], ..., state[0], ..., command[0], ..." 
+                time_now = datetime.now().strftime("%m%d%Y_%H%M%S") 
+                fpath = os.path.join('./results', self.framework+'_log_'+time_now+'.dat')
+                np.savetxt(fpath, log_data, header=header, fmt='%.10f') 
+
+        # Average reward:
+        eval_reward = [float('{:.4f}'.format(eval_r/self.args.num_eval)) for eval_r in eval_reward]
+        benchmark_reward = float('{:.4f}'.format(benchmark_reward/self.args.num_eval))
+        print("--------------------------------------------------------------------------------------------------------------------------------")
+        print(f"total_timesteps: {self.total_timesteps} \t eval_reward: {eval_reward} \t benchmark_reward: {benchmark_reward} \t explor_noise_std: {self.explor_noise_std}")
+        print("--------------------------------------------------------------------------------------------------------------------------------")
+        sys.exit("The trained agent has been test!") if self.args.test_model == True else None
+
+        # Save solved model:
+        for agent_id in range(self.args.N): 
+            if all(i[agent_id] == True for i in success_count) and self.args.save_model == True: # Problem is solved
+                self.agent_n[agent_id].save_solved_model(self.framework, self.total_timesteps, agent_id, self.seed)
+
+        return eval_reward, benchmark_reward
+        
+        
+if __name__ == '__main__':
     # Hyperparameters:
-    parser = argparse.ArgumentParser(description='Reinforcement Learning for Quadrotor UAV')
-    parser.add_argument("--save_model", default=True, action="store_true",
-                    help='Save models and optimizer parameters (default: True)')
-    parser.add_argument("--test_model", default=False, type=bool,
-                    help='Load and test trained models (default: False)')   
-    parser.add_argument("--save_log", default=False, type=bool,
-                    help='Load trained models and save log(default: False)')      
-    parser.add_argument("--eval_freq", default=1e4, type=int,
-                    help='How often (time steps) evaluate our trained model')       
-    parser.add_argument('--seed', default=1234, type=int, metavar='N',
-                    help='Random seed of Gym, PyTorch and Numpy (default: 1234)')      
-    # Args of Environment:
-    parser.add_argument('--env_id', default="Quad-v0",
-                    help='Name of OpenAI Gym environment (default: Quad-v0)')
-    parser.add_argument('--wrapper_id', default="",
-                    help='Name of wrapper: Sim2RealWrapper')    
-    parser.add_argument('--aux_id', default="",
-                    help='Name of auxiliary technique: EquivWrapper, eRWrapper')    
-    parser.add_argument('--max_steps', default=4000, type=int,
-                    help='Maximum number of steps in each episode (default: 2000)')
-    parser.add_argument('--max_timesteps', default=int(10e6), type=int,
-                    help='Number of total timesteps (default: 3e6)')
-    parser.add_argument('--render', default=False, type=bool,
-                    help='Simulation visualization (default: False)')
-    # Args of Agents:
-    parser.add_argument("--policy", default="TD3_CAPS",
-                    help='Which algorithms? DDPG or TD3 or TD3_CAPS(default: TD3)')
-    parser.add_argument("--actor_hidden_dim", default=8, type=int, 
-                    help='Number of nodes in hidden layers of actor net (default: 64)')
-    parser.add_argument("--critic_hidden_dim", default=512, type=int, 
-                    help='Number of nodes in hidden layers of critic net (default: 256)')
-    parser.add_argument('--discount', default=0.99, type=float, metavar='G',
-                        help='discount factor, gamma (default: 0.99)')
-    parser.add_argument('--lr', default=1e-4, type=float, metavar='G',
-                        help='learning rate, alpha (default: 1e-5)')
-    parser.add_argument("--start_timesteps", default=int(1e4), type=int, 
-                    help='Number of steps for uniform-random action selection (default: 1e4)')
-    # DDPG:
-    parser.add_argument('--tau', default=0.005, type=float, metavar='G',
-                    help='Target network update rate (default: 0.005)')
-    # TD3:
-    parser.add_argument("--act_noise", default=0.1, type=float,
-                    help='Stddev for Gaussian exploration noise (default: 0.1)')
-    parser.add_argument("--target_noise", default=0.2, type=float,
-                    help='Stddev for smoothing noise added to target policy (default: 0.2)')
-    parser.add_argument("--noise_clip", default=0.5, type=float,
-                    help='Clipping range of target policy smoothing noise (default: 0.5)')
-    parser.add_argument('--policy_update_freq', default=4, type=int, metavar='N',
-                        help='Frequency of “Delayed” policy updates (default: 2)')
-    # Args of Replay buffer:
-    parser.add_argument('--batch_size', default=256, type=int, metavar='N',
-                        help='Batch size of actor and critic networks (default: 256)')
-    parser.add_argument('--replay_buffer_size', default=int(3e6), type=int, metavar='N',
-                        help='Maximum size of replay buffer (default: 1e6)')
+    parser = args_parse.create_parser()
     args = parser.parse_args()
 
     # Show information:
-    print("------------------------------------------------------------------------------------------")
-    print("Env:", args.env_id, "| Auxiliary:", args.aux_id, "| Wrapper:", args.wrapper_id, 
-          "| Policy:", args.policy, "| Seed:", args.seed)
-    print("gamma:", args.discount, "| lr:", args.lr, "| Actor hidden dim:", args.actor_hidden_dim, 
-          "| Critic hidden dim:", args.critic_hidden_dim, "| Batch size:", args.batch_size)
-    print("------------------------------------------------------------------------------------------")
+    print("---------------------------------------------------------------------------------------------------------------------")
+    print("Framework:", args.framework, "| Seed:", args.seed, "| Batch size:", args.batch_size)
+    print("gamma:", args.discount, "| lr_a:", args.lr_a, "| lr_c:", args.lr_c, 
+          "| Actor hidden dim:", args.actor_hidden_dim, 
+          "| Critic hidden dim:", args.critic_hidden_dim)
+    print("---------------------------------------------------------------------------------------------------------------------")
 
-    # Make OpenAI Gym environment:
-    if args.wrapper_id == "Sim2RealWrapper":
-        env = Sim2RealWrapper()
-    elif args.aux_id == "EquivWrapper":
-        env = EquivWrapper()
-    else:
-        env = gym.make(args.env_id)
-
-    # Set seed for random number generators:
-    if args.seed:
-        env.seed(args.seed)
-        env.action_space.seed(args.seed)
-        env.observation_space.seed(args.seed)
-        torch.manual_seed(args.seed)
-        np.random.seed(args.seed)
-
-    # Create directories:    
-    if not os.path.exists("./models"):
-        os.makedirs("./models")
-    if not os.path.exists("./results"):
-        os.makedirs("./results")
-
-    # Initialize policy:
-    state_dim = env.observation_space.shape[0]
-    if args.aux_id == "EquivWrapper":
-        state_dim -= 1 # (_x1, _x3, _v1, _v2, _v3)
-    elif args.aux_id == "eRWrapper":
-        state_dim += 3 # (ex, ev, eR, R, eW)
-    action_dim = env.action_space.shape[0] 
-    min_act = env.action_space.low[0]
-    max_act = env.action_space.high[0]
-
-    kwargs = {
-        "state_dim" : state_dim,
-        "action_dim": action_dim,
-        "actor_hidden_dim": args.actor_hidden_dim,
-        "critic_hidden_dim": args.critic_hidden_dim,
-        "min_act": min_act,
-        "max_act": max_act,
-        "discount": args.discount,
-        "lr": args.lr,
-        "tau": args.tau,
-        "env": env,
-    }
-
-    if args.policy == "DDPG":
-        policy = DDPG.DDPG(**kwargs)
-    else:
-        kwargs["target_noise"] = args.target_noise 
-        kwargs["noise_clip"] = args.noise_clip 
-        kwargs["policy_update_freq"] = args.policy_update_freq
-        if args.policy == "TD3":
-            policy = TD3.TD3(**kwargs)
-        elif args.policy == "TD3_CAPS":
-            policy = TD3_CAPS.TD3_CAPS(**kwargs)
-     
-    # Set experience replay buffer:
-    replay_buffer = replay.ReplayBuffer(state_dim, action_dim, args.replay_buffer_size)
-
-    # Load trained models and optimizer parameters:
-    file_name = f"{args.policy}_{args.env_id}_{args.seed}"
-    if args.test_model == True:
-        policy.load(f"./models/{file_name + '_best'}") # '_solved' or '_best'
-
-    # Evaluate policy:
-    i_eval = 0
-    eval_policy = [eval_agent(policy, args, i_eval, file_name)]
-    if args.test_model == True:
-        sys.exit("The trained model has been test!")
-
-    # Setup loggers:
-    log_step_path = os.path.join("./results", "log_step_seed_"+str(args.seed)+".txt")   
-    log_eval_path = os.path.join("./results", "log_eval_seed_"+str(args.seed)+".txt")
-    log_step = open(log_step_path, "w+") # Total timesteps vs. Total reward
-    log_eval = open(log_eval_path,"w+")  # Total timesteps vs. Evaluated average reward
-
-    # Initialize environment:
-    i_episode, episode_timesteps, episode_reward = 0, 0, 0
-    max_total_reward = -1e9 # to save best models
-    state, done = env.reset(env_type='train'), False
-    if args.aux_id == "EquivWrapper":
-        '''
-        x_equiv, _, _, _ = equiv_state_decomposition(state)
-        b1d_equiv = np.append(x_equiv[:2], 0.) / np.linalg.norm(x_equiv[:2])
-        '''
-        '''
-        _, _, R, _ = state_decomposition(state)
-        b1d = get_current_b1(R) # desired heading direction
-        '''
-        b1d = np.array([1., 0., 0.])
-    elif args.aux_id == "eRWrapper":
-        x, v, R, W = state_decomposition(state)
-        Rd = get_current_Rd(R)
-    else:
-        b1d = np.array([1., 0., 0.])
-
-    # Training loop:
-    for total_timesteps in range(int(args.max_timesteps)):
-        episode_timesteps += 1
-
-        if args.aux_id == "EquivWrapper":
-            # state_equiv = equiv_state(state, b1d)
-            state_equiv = equiv_state(state)
-            '''
-            _, _, R_equiv, _ = equiv_state_decomposition(state)
-            eR = ang_btw_two_vectors(get_current_b1(R_equiv), b1d_equiv) # heading error [rad]
-            '''
-            x, v, R, W = state_decomposition(state)
-            eR = ang_btw_two_vectors(get_current_b1(R), b1d) # heading error [rad]
-        elif args.aux_id == "eRWrapper":
-            RdT_R = Rd.T @ R
-            eR = 0.5 * vee(RdT_R - RdT_R.T).flatten()
-            R_vec = R.reshape(9, 1, order='F').flatten()
-            state_eR = np.concatenate((x, v, R_vec, eR, W), axis=0)
-
-        # Select action randomly or from policy:
-        if total_timesteps < args.start_timesteps:
-            action = env.action_space.sample() 
-        else:
-            if args.aux_id == "EquivWrapper":
-                action = policy.select_action(np.array(state_equiv))
-            elif args.aux_id == "eRWrapper":
-                action = policy.select_action(np.array(state_eR))
-            else:
-                action = policy.select_action(np.array(state))
-            action = (
-                action + np.random.normal(0, args.act_noise, size=action_dim)
-            ).clip(min_act, max_act) # add exploration noise
-
-        # Perform action:
-        next_state, reward, done, _ = env.step(action)
-        eX = np.round(state[0:3]*env.x_lim, 5) # position error [m]
-
-        if args.aux_id == "EquivWrapper":
-            # next_state_equiv = equiv_state(next_state, b1d)
-            next_state_equiv = equiv_state(next_state)
-            x, v, R, W = state_decomposition(next_state)
-            eR = ang_btw_two_vectors(get_current_b1(R), b1d) # heading error [rad]
-        elif args.aux_id == "eRWrapper":
-            x, v, R, W = state_decomposition(next_state)
-            RdT_R = Rd.T @ R
-            eR = 0.5 * vee(RdT_R - RdT_R.T).flatten()
-            R_vec = R.reshape(9, 1, order='F').flatten()
-            next_state_eR = np.concatenate((x, v, R_vec, eR, W), axis=0)
-        else:
-            _, _, R, _ = state_decomposition(next_state)
-            eR = ang_btw_two_vectors(get_current_b1(R), b1d) # heading error [rad]
-
-        # 3D visualization:
-        if args.render == True:
-            env.render()
-
-        # Episode termination:
-        done_bool = float(done) if episode_timesteps < args.max_steps else 0.
-        if episode_timesteps == args.max_steps: # Episode terminated!
-            done = True
-            if (abs(eX) <= 0.1).all(): # Problem is solved!
-                done_bool = 1.
-
-        # Store a set of transitions in replay buffer
-        if args.aux_id == "EquivWrapper":
-            replay_buffer.add(state_equiv, action, next_state_equiv, reward, done_bool)
-        elif args.aux_id == "eRWrapper":
-            replay_buffer.add(state_eR, action, next_state_eR, reward, done_bool)
-        else:
-            replay_buffer.add(state, action, next_state, reward, done_bool)
-
-        # Train agent after collecting sufficient data:
-        if total_timesteps >= args.start_timesteps:
-            policy.train(replay_buffer, args.batch_size)
-
-        state = next_state
-        episode_reward += reward
-
-        if done: 
-            print(f"Total-timestpes: {total_timesteps+1}, #Episode: {i_episode+1}, timestpes: {episode_timesteps}, Reward: {episode_reward:.3f}, eX: {eX}, eR: {np.round(eR, 5)}")
-                        
-            # Save best model:
-            if episode_reward > max_total_reward:
-                print("#-------------------------------- Best! --------------------------------#")
-                best_model = 'Best Model!'
-                max_total_reward = episode_reward
-                if args.save_model == True:
-                    policy.save(f"./models/{file_name + '_best'}")
-            else:
-                best_model = ''
-
-            # Log data:
-            if total_timesteps >= args.start_timesteps:
-                log_step.write('{}\t {}\t {}\n'.format(total_timesteps+1, episode_reward, best_model))
-                log_step.flush()
-
-            # Reset environment:
-            state, done = env.reset(env_type='train'), False
-            if args.aux_id == "EquivWrapper":
-                '''
-                x_equiv, _, _, _ = equiv_state_decomposition(state)
-                b1d_equiv = np.append(x_equiv[:2], 0.) / np.linalg.norm(x_equiv[:2])
-                '''
-                '''
-                _, _, R, _ = state_decomposition(state)
-                b1d = get_current_b1(R) # desired heading direction
-                '''
-            elif args.aux_id == "eRWrapper":
-                x, v, R, W = state_decomposition(state)
-                Rd = get_current_Rd(R)
-            episode_timesteps, episode_reward = 0, 0
-            i_episode += 1 
-
-        # Evaluate episode
-        if (total_timesteps+1) % args.eval_freq == 0:
-            if total_timesteps >= args.start_timesteps:
-                i_eval += 1
-                eval_policy.append(eval_agent(policy, args, i_eval, file_name))
-                # Logging updates:
-                log_eval.write('{}\t {}\n'.format(total_timesteps+1, eval_policy[i_eval]))
-                log_eval.flush()
+    learner = Learner(args)
+    learner.train_policy()

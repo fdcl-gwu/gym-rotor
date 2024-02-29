@@ -1,10 +1,10 @@
 from setuptools import setup
 
 setup(name='gym-rotor',
-      version='0.0.1',
+      version='0.0.2',
       url='https://github.com/fdcl-gwu/gym-rotor',
       install_requires=[
-            'gym',
+            'gymnasium',
             'numpy',
             'scipy',
             'torch',

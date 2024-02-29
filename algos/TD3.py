@@ -3,126 +3,99 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.optim.lr_scheduler import CyclicLR, CosineAnnealingWarmRestarts
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+from algos.networks import Actor, Critic_TD3
 
-class Actor(nn.Module):
-    def __init__(self, state_dim, action_dim, actor_hidden_dim):
-        super(Actor, self).__init__()
-
-        # Fully-Connected (FC) layers
-        self.fc1 = nn.Linear(state_dim,  actor_hidden_dim)
-        self.fc2 = nn.Linear(actor_hidden_dim, actor_hidden_dim)
-        self.fc3 = nn.Linear(actor_hidden_dim, action_dim)        
-
-
-    def forward(self, state):
-        action = F.relu(self.fc1(state))
-        action = F.relu(self.fc2(action))
-        return torch.tanh(self.fc3(action)) # [-1, 1]
-
-
-class Critic(nn.Module):
-    def __init__(self, state_dim, action_dim, critic_hidden_dim):
-        super(Critic, self).__init__()
-        """
-        Clipped Double-Q Learning:
-        """
-        # Q1 architecture
-        self.fc1 = nn.Linear(state_dim + action_dim, critic_hidden_dim)
-        self.fc2 = nn.Linear(critic_hidden_dim, critic_hidden_dim)
-        self.fc3 = nn.Linear(critic_hidden_dim, 1)
-
-        # Q2 architecture
-        self.fc4 = nn.Linear(state_dim + action_dim, critic_hidden_dim)
-        self.fc5 = nn.Linear(critic_hidden_dim, critic_hidden_dim)
-        self.fc6 = nn.Linear(critic_hidden_dim, 1)
-
-    def forward(self, state, action):
-        q1 = F.relu(self.fc1(torch.cat([state, action], 1)))
-        q1 = F.relu(self.fc2(q1))
-        q1 = self.fc3(q1)
-
-        q2 = F.relu(self.fc4(torch.cat([state, action], 1)))
-        q2 = F.relu(self.fc5(q2))
-        q2 = self.fc6(q2)
-
-        return q1, q2
-
-
-    def Q1(self, state, action):
-        q1 = F.relu(self.fc1(torch.cat([state, action], 1)))
-        q1 = F.relu(self.fc2(q1))
-        q1 = self.fc3(q1)        
-
-        return q1
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+    print("CUDA found.")
+elif torch.backends.mps.is_available():
+    device = torch.device("mps")
+    print("MPS found.")
+else:
+    device = torch.device("cpu")
 
 
 class TD3(object):
-    def __init__(self, state_dim, action_dim, actor_hidden_dim, critic_hidden_dim, \
-                       max_act, min_act, discount, lr, tau, env, 
-                       target_noise, noise_clip, policy_update_freq):
-
-        self.actor = Actor(state_dim, action_dim, actor_hidden_dim).to(device)
-        self.actor_target = copy.deepcopy(self.actor)
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr)
-
-        self.critic = Critic(state_dim, action_dim, critic_hidden_dim).to(device)
-        self.critic_target = copy.deepcopy(self.critic)
-        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr)
-
-        self.min_act = min_act
-        self.max_act = max_act
-        self.discount = discount
-        self.tau = tau
-        self.target_noise = target_noise
-        self.noise_clip = noise_clip
-        self.policy_update_freq = policy_update_freq
-
-        self.hover_force = env.hover_force # [N]
-        self.min_force = env.min_force # [N]
-        self.max_force = env.max_force # [N]
-        self.action_dim = action_dim 
-
+    def __init__(self, args, agent_id):
+        
+        self.framework = args.framework
+        self.N = args.N
+        self.agent_id = agent_id
+        self.max_action = args.max_action
+        self.action_dim = args.action_dim_n[agent_id]
+        self.lr_a = args.lr_a[agent_id]
+        self.lr_c = args.lr_c[agent_id]
+        self.discount = args.discount
+        self.tau = args.tau
+        self.use_clip_grad_norm = args.use_clip_grad_norm
+        self.grad_max_norm = args.grad_max_norm
+        self.target_noise = args.target_noise
+        self.noise_clip = args.noise_clip
+        self.policy_update_freq = args.policy_update_freq
+        self.lam_T, self.lam_S, self.lam_M = args.lam_T, args.lam_S, args.lam_M
         self.total_it = 0
 
+        self.actor = Actor(args, agent_id).to(device)
+        self.actor_target = copy.deepcopy(self.actor)
+        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=self.lr_a)
+        self.actor_scheduler = CosineAnnealingWarmRestarts(self.actor_optimizer, T_0=3500000, eta_min=1e-6)
+        '''
+        self.actor_scheduler = CyclicLR(self.actor_optimizer, base_lr = 1e-6,  max_lr = 5e-4, \
+            cycle_momentum = False, mode='triangular') # {triangular, triangular2, exp_range}
+        '''
 
-    def select_action(self, state):
-        state = torch.FloatTensor(state.reshape(1, -1)).to(device)
-        action = self.actor(state)
-        return action.cpu().data.numpy().flatten()
+        self.critic = Critic_TD3(args, agent_id).to(device)
+        self.critic_target = copy.deepcopy(self.critic)
+        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=self.lr_c)
+        self.critic_scheduler = CosineAnnealingWarmRestarts(self.critic_optimizer, T_0=3500000, eta_min=1e-6)
+        '''
+        self.critic_scheduler = CyclicLR(self.critic_optimizer, base_lr = 1e-6,  max_lr = 5e-4, \
+            cycle_momentum = False, mode='triangular') # {triangular, triangular2, exp_range}
+        '''
 
-    def train(self, replay_buffer, batch_size):
+
+    # Each agent selects actions based on its own local observations(add noise for exploration)
+    def choose_action(self, obs, explor_noise_std):
+        obs = torch.unsqueeze(torch.tensor(obs, dtype=torch.float), 0).to(device)
+        act = self.actor(obs).cpu().data.numpy().flatten()
+        return (act + np.random.normal(0, explor_noise_std, size=self.action_dim)).clip(-self.max_action, self.max_action)
+
+
+    def train(self, replay_buffer, agent_n, env):
         self.total_it += 1
 
         # Randomly sample a batch of transitions from an experience replay buffer:
-        state, action, next_state, reward, done = replay_buffer.sample(batch_size)
+        batch_obs_n, batch_act_n, batch_rwd_n, batch_obs_next_n, batch_done_n = replay_buffer.sample()
+
+        batch_obs = batch_obs_n[self.agent_id]
+        batch_act = batch_act_n[self.agent_id]
+        batch_rwd = batch_rwd_n[self.agent_id]
+        batch_obs_next = batch_obs_next_n[self.agent_id]
+        batch_done = batch_done_n[self.agent_id]
 
         """
         Q-Learning side of TD3 with critic networks:
         """
-        # Get current Q-values, Q1(s, a) and Q2(s, a):
-        current_Q1, current_Q2 = self.critic(state, action)
-
-        with torch.no_grad():
+        with torch.no_grad():  # target_Q has no gradient
+            batch_act_next = agent_n[self.agent_id].actor_target(batch_obs_next)
             # Add clipped noise to target actions for 'target policy smoothing':
-            noise = (
-                torch.randn_like(action) * self.target_noise
-            ).clamp(-self.noise_clip, self.noise_clip)
-            
+            noise = (torch.randn_like(batch_act_next) * self.target_noise).clamp(-self.noise_clip, self.noise_clip)
             # Compute target actions from a target policy network:
-            next_action = (
-                self.actor_target(next_state) + noise
-            ).clamp(self.min_act, self.max_act) 
+            batch_act_next = (batch_act_next + noise).clamp(-self.max_action, self.max_action)
 
             # Get target Q-values, Q_targ(s', a'): 
-            target_Q1, target_Q2 = self.critic_target(next_state, next_action)
+            target_Q1, target_Q2 = self.critic_target(batch_obs_next, batch_act_next)
 
             # Use a smaller target Q-value:
             target_Q = torch.min(target_Q1, target_Q2)
 
             # Compute targets, y(r, s', d):
-            target_Q = reward + self.discount * (1 - done) * target_Q
+            target_Q = batch_rwd + self.discount * (1 - batch_done) * target_Q  # shape:(batch_size,1)
+
+        # Get current Q-values, Q1(s, a) and Q2(s, a):
+        current_Q1, current_Q2 = self.critic(batch_obs, batch_act)   # shape:(batch_size,1)
 
         # Set a mean-squared Bellman error (MSBE) loss function:
         critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
@@ -130,8 +103,10 @@ class TD3(object):
         # Update Q-functions by gradient descent:
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
+        if self.use_clip_grad_norm:
+            torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.grad_max_norm)
         self.critic_optimizer.step()
-
+        self.critic_scheduler.step()
 
         """
         Policy learning side of TD3 with actor networks:
@@ -140,14 +115,54 @@ class TD3(object):
         if self.total_it % self.policy_update_freq == 0:
 
             # Set actor loss s.t. Q(s,\mu(s)) approximates \max_a Q(s,a):
-            actor_loss = -self.critic.Q1(state, self.actor(state)).mean()
+            batch_act = (self.actor(batch_obs)).clamp(-self.max_action, self.max_action)
+            actor_loss = -self.critic.Q1(batch_obs, batch_act).mean()  # Only use Q1
             
+            # Regularizing action policies for smooth control
+            lam_T = self.lam_T # Temporal Smoothness
+            batch_act_next = self.actor(batch_obs_next).clamp(-self.max_action, self.max_action)
+            Loss_T = F.mse_loss(batch_act, batch_act_next)
+            actor_loss += lam_T * Loss_T
+
+            lam_S = self.lam_S # Spatial Smoothness
+            noise_S = (
+                torch.normal(mean=0., std=0.05, size=(1, self.action_dim))
+                ).clamp(-self.noise_clip, self.noise_clip).to(device) # mean and standard deviation
+            action_bar = (batch_act + noise_S).clamp(-self.max_action, self.max_action)
+            Loss_S = F.mse_loss(batch_act, action_bar)
+            actor_loss += lam_S * Loss_S
+
+            lam_M = self.lam_M # Magnitude Smoothness
+            batch_size = batch_act.shape[0]
+            if self.framework == "SARL":
+                f_total_hover = np.interp(4.*env.hover_force, 
+                                        [4.*env.min_force, 4.*env.max_force], 
+                                        [-self.max_action, self.max_action]
+                                ) * torch.ones(batch_size, 1) # normalized into [-1, 1]
+                M_hover = torch.zeros(batch_size, 3)
+                nominal_action = torch.cat([f_total_hover, M_hover], 1).to(device)
+            elif self.framework == "DTDE":
+                if self.agent_id == 0:
+                    f_total_hover = np.interp(4.*env.hover_force, 
+                                            [4.*env.min_force, 4.*env.max_force], 
+                                            [-self.max_action, self.max_action]
+                                    ) * torch.ones(batch_size, 1) # normalized into [-1, 1]
+                    tau_hover = torch.zeros(batch_size, 3)
+                    nominal_action = torch.cat([f_total_hover, tau_hover], 1).to(device)
+                elif self.agent_id == 1:
+                    nominal_action = torch.zeros(batch_size, 1).to(device) # M3_hover
+            Loss_M = F.mse_loss(batch_act, nominal_action)
+            actor_loss += lam_M * Loss_M
+
             # Update policy by gradient ascent:
             self.actor_optimizer.zero_grad()
             actor_loss.backward()
+            if self.use_clip_grad_norm:
+                torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.grad_max_norm)
             self.actor_optimizer.step()
+            self.actor_scheduler.step()
 
-            # Update target targets:
+            # Softly update the target networks
             for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
                 target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
@@ -155,20 +170,23 @@ class TD3(object):
                 target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
 
-    def save(self, filename):
-        torch.save(self.critic.state_dict(), filename + "_critic")
-        torch.save(self.critic_optimizer.state_dict(), filename + "_critic_optimizer")
-        
-        torch.save(self.actor.state_dict(), filename + "_actor")
-        torch.save(self.actor_optimizer.state_dict(), filename + "_actor_optimizer")
+    def save_model(self, framework, total_steps, agent_id, seed):
+        torch.save(self.actor.state_dict(), "./models/{}_{}k_steps_agent_{}_{}.pth".format(framework, total_steps/1000, agent_id, seed))
 
 
-    def load(self, filename):
-        self.critic.load_state_dict(torch.load(filename + "_critic"))
-        self.critic_optimizer.load_state_dict(torch.load(filename + "_critic_optimizer"))
-        self.critic_target = copy.deepcopy(self.critic)
+    def save_solved_model(self, framework, total_steps, agent_id, seed):
+        torch.save(self.actor.state_dict(), "./models/{}_{}k_steps_agent_{}_solved_{}.pth".format(framework, total_steps/1000, agent_id, seed))
 
-        self.actor.load_state_dict(torch.load(filename + "_actor"))
-        self.actor_optimizer.load_state_dict(torch.load(filename + "_actor_optimizer"))
-        self.actor_target = copy.deepcopy(self.actor)
-		
+
+    def load(self, framework, total_steps, agent_id, seed):
+        if device == "gpu":
+            self.actor.load_state_dict(torch.load("./models/{}_{}k_steps_agent_{}_{}.pth".format(framework, total_steps/1000, agent_id, seed)))
+        else:
+            self.actor.load_state_dict(torch.load("./models/{}_{}k_steps_agent_{}_{}.pth".format(framework, total_steps/1000, agent_id, seed), map_location=torch.device('cpu')))
+
+
+    def load_solved_model(self, framework, total_steps, agent_id, seed):
+        if device == "gpu":
+            self.actor.load_state_dict(torch.load("./models/{}_{}k_steps_agent_{}_solved_{}.pth".format(framework, total_steps/1000, agent_id, seed)))
+        else:
+            self.actor.load_state_dict(torch.load("./models/{}_{}k_steps_agent_{}_solved_{}.pth".format(framework, total_steps/1000, agent_id, seed), map_location=torch.device('cpu')))

@@ -137,7 +137,7 @@ dmypy.json
 .pydevproject
 
 # gym-rotor
-models/
-results/
-*.dat
-_benchmark
+*.txt
+#models/
+#results/
+#*.dat

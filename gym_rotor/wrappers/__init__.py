@@ -1,2 +1,2 @@
-from gym_rotor.wrappers.s2r_wrapper import Sim2RealWrapper
-from gym_rotor.wrappers.equiv_wrapper import EquivWrapper
+from gym_rotor.wrappers.coupled_yaw_wrapper import CoupledWrapper
+from gym_rotor.wrappers.decoupled_yaw_wrapper import DecoupledWrapper
