@@ -13,8 +13,8 @@ from gym_rotor.wrappers.coupled_yaw_wrapper import CoupledWrapper
 from utils.utils import *
 from utils.trajectory_generation import TrajectoryGeneration
 from algos.replay_buffer import ReplayBuffer
-from algos.matd3 import MATD3
-from algos.td3 import TD3
+from algos.td3.matd3 import MATD3
+from algos.td3.td3 import TD3
 import args_parse
 
 # Create directories:    
