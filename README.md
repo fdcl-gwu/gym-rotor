@@ -93,11 +93,13 @@ If you find this work useful in your own work or would like to cite it, please g
   year={2023}
 }
 
-@article{yu2022equivariant,
-  title={Equivariant Reinforcement Learning for Quadrotor UAV},
+@inproceedings{yu2023equivariant,
+  title={Equivariant reinforcement learning for quadrotor UAV},
   author={Yu, Beomyeol and Lee, Taeyoung},
-  journal={arXiv preprint arXiv:2206.01233},
-  year={2022}
+  booktitle={2023 American Control Conference (ACC)},
+  pages={2842--2847},
+  year={2023},
+  organization={IEEE}
 }
 ```
 
