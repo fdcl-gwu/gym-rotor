@@ -49,17 +49,6 @@ class TrajectoryGeneration:
         self.xd, self.vd, self.Wd = np.zeros(3), np.zeros(3), np.zeros(3)
         self.xd_norm, self.vd_norm, self.Wd_norm = np.zeros(3), np.zeros(3), np.zeros(3)
         self.b1d = np.array([1.,0.,0.]) # desired heading direction
-        self.b3d = np.array([0.,0.,1.])
-
-        # Integral terms:
-        self.use_integral = True
-        self.sat_sigma = 1.
-        self.eIX = IntegralErrorVec3() # Position integral error
-        self.eIR = IntegralError() # Attitude integral error
-        self.eIX.set_zero() # Set all integrals to zero
-        self.eIR.set_zero()
-        self.alpha, self.beta = args.alpha, args.beta # addressing noise or delay
-        self.eIx_lim, self.eIb1_lim = env.eIx_lim, env.eIb1_lim
 
         # Geometric tracking controller:
         self.xd_2dot, self.xd_3dot, self.xd_4dot = np.zeros(3), np.zeros(3), np.zeros(3)
@@ -71,7 +60,6 @@ class TrajectoryGeneration:
         # Manual mode:
         self.manual_mode = False
         self.manual_mode_init = False
-        self.init_b1d = True
         self.x_offset = np.zeros(3)
         self.yaw_offset = 0.0
 
@@ -109,7 +97,7 @@ class TrajectoryGeneration:
         self.vd_norm = self.vd/self.v_lim
         self.Wd_norm = self.Wd/self.W_lim
 
-        return self.xd_norm, self.vd_norm, self.b1d, self.b3d, self.Wd_norm
+        return self.xd_norm, self.vd_norm, self.Wd_norm
 
 
     def get_desired_geometric_controller(self):
@@ -130,13 +118,7 @@ class TrajectoryGeneration:
             return
         
         if self.mode == 0 or self.mode == 1:  # idle and warm-up
-            if self.init_b1d == True:
-                self.set_desired_states_to_zero()
-                b1d_temp = self.get_current_b1()
-                theta_b1d = np.random.uniform(size=1,low=np.pi/6, high=np.pi/4) 
-                self.b1d = R_e3(theta_b1d) @ b1d_temp 
-                # print(theta_b1d, b1d_temp, self.b1d)
-                self.init_b1d = False
+            self.set_desired_states_to_zero()
         elif self.mode == 2:  # take-off
             self.takeoff()
         elif self.mode == 3:  # land
@@ -162,9 +144,7 @@ class TrajectoryGeneration:
         self.x_offset = np.zeros(3)
         self.yaw_offset = 0.
         # self.yaw = np.random.uniform(size=1,low=-np.pi, high=np.pi) 
-        self.init_b1d = True
         self.update_initial_state()
-        self.reset_integral_terms()
 
 
     def mark_traj_end(self, switch_to_manual=False):
@@ -186,7 +166,6 @@ class TrajectoryGeneration:
     def set_desired_states_to_zero(self):
         self.xd, self.vd, self.Wd = np.zeros(3), np.zeros(3), np.zeros(3)
         self.b1d = np.array([1.,0.,0.]) # desired heading direction
-        self.b3d = np.array([0.,0.,1.])
 
     
     def set_desired_states_to_current(self):
@@ -213,7 +192,6 @@ class TrajectoryGeneration:
         if not self.manual_mode_init:
             self.set_desired_states_to_current()
             self.update_initial_state()
-            self.reset_integral_terms()
 
             self.manual_mode_init = True
             self.x_offset = np.zeros(3)
@@ -231,7 +209,6 @@ class TrajectoryGeneration:
     def takeoff(self):
         if not self.trajectory_started:
             self.set_desired_states_to_zero()
-            self.reset_integral_terms()
 
             # Take-off starts from the current horizontal position:
             self.xd[0] = self.x[0]
@@ -273,7 +250,6 @@ class TrajectoryGeneration:
     def land(self):
         if not self.trajectory_started:
             self.set_desired_states_to_current()
-            self.reset_integral_terms()
             self.t_traj = (self.landing_motor_cutoff_height - self.x[2]) / self.landing_velocity
 
             # Set the take-off yaw to the current yaw:
@@ -312,7 +288,6 @@ class TrajectoryGeneration:
     def circle(self):
         if not self.trajectory_started:
             self.set_desired_states_to_current()
-            self.reset_integral_terms()
             self.trajectory_started = True
 
             self.circle_center = np.copy(self.x)
@@ -367,46 +342,15 @@ class TrajectoryGeneration:
             self.mark_traj_end(True)
             
 
-    def reset_integral_terms(self):
-        # Reset integral terms:
-        self.eIx  = np.zeros(3)
-        self.eIb1 = 0.
-        self.eIX.set_zero() # Set all integrals to zero
-        self.eIR.set_zero()
-    
-
-    def get_error_state(self, framework):
+    def get_error_state(self):
         # Normalized error obs:
         ex_norm = self.x_norm - self.xd_norm # position error
         ev_norm = self.v_norm - self.vd_norm # velocity error
         eW_norm = self.W_norm - self.Wd_norm # ang vel error
 
-        # Compute yaw angle error: 
-        b1 = self.R @ np.array([1.,0.,0.])
-        b2 = self.R @ np.array([0.,1.,0.])
-        b3 = self.R @ np.array([0.,0.,1.])
-        b1c = -(hat(b3) @ hat(b3)) @ self.b1d # desired b1 
-        eb1 = norm_ang_btw_two_vectors(b1c, b1) # b1 error, [-1, 1)
-
-        # Update integral terms: 
-        self.eIX.integrate(-self.alpha*self.eIX.error + ex_norm*self.x_lim, self.dt) 
-        self.eIx = clip(self.eIX.error/self.eIx_lim, -self.sat_sigma, self.sat_sigma)
-        self.eIR.integrate(-self.beta*self.eIR.error + eb1*np.pi, self.dt) # b1 integral error
-        self.eIb1 = clip(self.eIR.error/self.eIb1_lim, -self.sat_sigma, self.sat_sigma)
-
-        if framework in ("CTDE","DTDE"):
-            # Agent1's obs:
-            ew12 = eW_norm[0]*b1 + eW_norm[1]*b2
-            obs_1 = np.concatenate((ex_norm, ev_norm, b3, ew12, self.eIx), axis=None)
-            # Agent2's obs:
-            eW3_norm = eW_norm[2]
-            obs_2 = np.concatenate((b1, eW3_norm, eb1, self.eIb1), axis=None)
-            error_obs_n = [obs_1, obs_2]
-        elif framework == "SARL":
-            # Single-agent's obs:
-            R_vec = self.R.reshape(9, 1, order='F').flatten()
-            obs = np.concatenate((ex_norm, ev_norm, R_vec, eW_norm, self.eIx, eb1, self.eIb1), axis=None)
-            error_obs_n = [obs]
-        error_state = (ex_norm, ev_norm, eW_norm, self.eIx, eb1, self.eIb1)
+        R_vec = self.R.reshape(9, 1, order='F').flatten()
+        obs = np.concatenate((ex_norm, ev_norm, R_vec, eW_norm), axis=None)
+        error_obs_n = [obs]
+        error_state = (ex_norm, ev_norm, eW_norm)
         
         return error_obs_n, error_state

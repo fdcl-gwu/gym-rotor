@@ -2,8 +2,6 @@
 import os, gym_rotor, args_parse
 import gymnasium as gym
 from gym_rotor.envs.quad_utils import *
-from gym_rotor.wrappers.decoupled_yaw_wrapper import DecoupledWrapper
-from gym_rotor.wrappers.coupled_yaw_wrapper import CoupledWrapper
 import numpy as np
 import matplotlib.pyplot as plt
 plt.style.use("seaborn-v0_8")
@@ -21,16 +19,10 @@ is_SAVE = True
 # Pre-processing:
 parser = args_parse.create_parser()
 args = parser.parse_args()
-if args.framework in ("CTDE","DTDE"):
-    env = DecoupledWrapper()
-    load_act  = log_date[:, 0:5] # automatically discards the headers
-    load_obs  = log_date[:, 5:28] 
-    load_cmd  = log_date[:, 28:] 
-elif args.framework == "SARL":
-    env = CoupledWrapper()
-    load_act  = log_date[:, 0:4] # automatically discards the headers
-    load_obs  = log_date[:, 4:27] 
-    load_cmd  = log_date[:, 27:] 
+env = gym.make("Quad-v0")
+load_act  = log_date[:, 0:4] # automatically discards the headers
+load_obs  = log_date[:, 4:22] 
+load_cmd  = log_date[:, 22:] 
 act = load_act[start_index-2: end_index-2]
 obs = load_obs[start_index-2: end_index-2]
 cmd = load_cmd[start_index-2: end_index-2]
@@ -43,72 +35,15 @@ R11, R21, R31 = obs[:, 6],  obs[:, 7],  obs[:, 8]
 R12, R22, R32 = obs[:, 9],  obs[:, 10], obs[:, 11]
 R13, R23, R33 = obs[:, 12], obs[:, 13], obs[:, 14]  
 W1, W2, W3 = obs[:, 15]*env.W_lim, obs[:, 16]*env.W_lim, obs[:, 17]*env.W_lim
-eIx1, eIx2, eIx3 = obs[:, 18]*env.eIx_lim, obs[:, 19]*env.eIx_lim, obs[:, 20]*env.eIx_lim
-eb1, eIb1 = obs[:, 21]*np.pi, obs[:, 22]*env.eIb1_lim # eb1 =b1 error, [-pi, pi)
 
 # Actions:
-fM = np.zeros((4, act.shape[0])) # Force-moment vector
-f_total = (
-        4 * (env.scale_act * act[:, 0] + env.avrg_act)
-        ).clip(4*env.min_force, 4*env.max_force)
-if args.framework in ("CTDE","DTDE"):
-    tau = act[:, 1:4]
-    b1, b2 = obs[:, 6:9], obs[:, 9:12]
-    fM[0] = f_total
-    fM[1] = np.einsum('ij,ij->i', b1, tau) + env.J[2,2]*W3*W2 # M1
-    fM[2] = np.einsum('ij,ij->i', b2, tau) - env.J[2,2]*W3*W1 # M2
-    fM[3] = act[:, 4] # M3
-    
-    # FM matrix to thrust of each motor:
-    forces = (env.fM_to_forces @ fM).clip(env.min_force, env.max_force)
-    f1, f2, f3, f4 = forces[0], forces[1], forces[2], forces[3]
-elif args.framework == "SARL":
-    fM[0] = f_total
-    fM[1], fM[2], fM[3] = act[:, 1], act[:, 2], act[:, 3] 
-	
-    # FM matrix to thrust of each motor:
-    forces = (env.fM_to_forces @ fM).clip(env.min_force, env.max_force)
-    f1, f2, f3, f4 = forces[0], forces[1], forces[2], forces[3]
+f1, f2, f3, f4 = act[:, 0], act[:, 1], act[:, 2], act[:, 3] 
 
 # Commands:
 xd1, xd2, xd3 = cmd[:, 0]*env.x_lim, cmd[:, 1]*env.x_lim, cmd[:, 2]*env.x_lim
 vd1, vd2, vd3 = cmd[:, 3]*env.v_lim, cmd[:, 4]*env.v_lim, cmd[:, 5]*env.v_lim
-b1d1, b1d2, b1d3 = cmd[:, 6], cmd[:, 7], cmd[:, 8]
-b3d1, b3d2, b3d3 = cmd[:, 9], cmd[:, 10], cmd[:, 11]
-Wd1, Wd2, Wd3 = cmd[:, 12]*env.W_lim, cmd[:, 13]*env.W_lim, cmd[:, 14]*env.W_lim
+Wd1, Wd2, Wd3 = cmd[:, 6]*env.W_lim, cmd[:, 7]*env.W_lim, cmd[:, 8]*env.W_lim
 Rd = np.eye(3) # arbitrary desired attitude
-
-#######################################################################
-############################ Plot f and M #############################
-#######################################################################
-fig, axs = plt.subplots(4, figsize=(25, 12))
-axs[0].plot(t, fM[0], linewidth=3)
-axs[0].set_ylabel('$f$ [N]', size=fontsize)
-
-axs[1].plot(t, fM[1], linewidth=3) 
-axs[1].set_ylabel('$M_1$ [Nm]', size=fontsize)
-
-axs[2].plot(t, fM[2], linewidth=3)
-axs[2].set_ylabel('$M_2$ [Nm]', size=fontsize)
-
-axs[3].plot(t, fM[3], linewidth=3) 
-axs[3].set_ylabel('$M_3$ [Nm]', size=fontsize)
-axs[3].set_xlabel('Time [s]', size=fontsize)
-
-for i in range(4):
-    axs[i].set_xlim([0., t[-1]])
-    axs[i].grid(True, color='white', linestyle='-', linewidth=1.0)
-    axs[i].locator_params(axis='y', nbins=4)
-for label in (axs[0].get_xticklabels() + axs[0].get_yticklabels()):
-	label.set_fontsize(fontsize)
-for label in (axs[1].get_xticklabels() + axs[1].get_yticklabels()):
-    label.set_fontsize(fontsize)
-for label in (axs[2].get_xticklabels() + axs[2].get_yticklabels()):
-	label.set_fontsize(fontsize)
-for label in (axs[3].get_xticklabels() + axs[3].get_yticklabels()):
-	label.set_fontsize(fontsize)
-if is_SAVE:
-    plt.savefig(os.path.join('./results', file_name[:4]+file_name[8:]+'_fM'+'.png'), bbox_inches='tight')
 
 #######################################################################
 ############################# Plot Forces #############################

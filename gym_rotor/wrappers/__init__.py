@@ -1,2 +1,0 @@
-from gym_rotor.wrappers.coupled_yaw_wrapper import CoupledWrapper
-from gym_rotor.wrappers.decoupled_yaw_wrapper import DecoupledWrapper

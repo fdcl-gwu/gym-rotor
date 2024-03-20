@@ -8,13 +8,9 @@ from datetime import datetime
 
 import gym_rotor
 from gym_rotor.envs.quad_utils import *
-from gym_rotor.wrappers.decoupled_yaw_wrapper import DecoupledWrapper
-from gym_rotor.wrappers.coupled_yaw_wrapper import CoupledWrapper
-from utils.utils import *
 from utils.trajectory_generation import TrajectoryGeneration
 from algos.replay_buffer import ReplayBuffer
-from algos.td3.matd3 import MATD3
-from algos.td3.td3 import TD3
+from algos.td3 import TD3
 import args_parse
 
 # Create directories:    
@@ -26,25 +22,14 @@ class Learner:
         # Make a new OpenAI Gym environment:
         self.args = args
         self.framework = self.args.framework
-        if self.framework in ("CTDE","DTDE"):
-            """--------------------------------------------------------------------------------------------------
-            | Agents  | Observations           | obs_dim | Actions:       | act_dim | Rewards                   |
-            | #agent1 | {ex, ev, b3, ew12, eIx} | 15      | {f_total, tau} | 4       | f(ex, ev, eb3, ew12, eIx) |
-            | #agent2 | {b1, eW3, eb1, eIb1}    | 6       | {M3}           | 1       | f(eb1, eW3, eIb1)         |
-            --------------------------------------------------------------------------------------------------"""
-            self.env = DecoupledWrapper()
-            self.args.N = 2  # num of agents
-            self.args.obs_dim_n = [15, 6]
-            self.args.action_dim_n = [4, 1]
-        elif self.framework == "SARL":
-            """------------------------------------------------------------------------------------------------------------------
-            | Agents  | Observations                    | obs_dim | Actions:     | act_dim | Rewards                            |
-            | #agent1 | {ex, ev, R, eW, eIx, eb1, eIb1} | 23      | {f_total, M} | 4       | f(ex, ev, eb1, eb3, eW, eIx, eIb1) |
-            ------------------------------------------------------------------------------------------------------------------"""
-            self.env = CoupledWrapper()
-            self.args.N = 1  # num of agents
-            self.args.obs_dim_n = [23]
-            self.args.action_dim_n = [4]
+        """---------------------------------------------------------------------------------
+        | Agents  | Observations    | obs_dim | Actions:      | act_dim | Rewards          |
+        | #agent  | {ex, ev, R, eW} | 18      | {T1,T2,T3,T4} | 4       | f(ex, ev, eW, a) |
+        ---------------------------------------------------------------------------------"""
+        self.env = gym.make("Quad-v0")
+        self.args.N = 1  # num of agents
+        self.args.obs_dim_n = [18]
+        self.args.action_dim_n = [4]
         
         # Set seed for random number generators:
         self.seed = self.args.seed
@@ -62,34 +47,16 @@ class Learner:
             self.explor_noise_std = self.args.explor_noise_std_init  # initialize explor_noise_std
 
         # Initialize N agents:
-        if self.framework == "CTDE":
-            self.agent_n = [MATD3(args, agent_id) for agent_id in range(self.args.N)]
-        elif self.framework in ("SARL", "DTDE"):
-            self.agent_n = [TD3(args, agent_id) for agent_id in range(self.args.N)]
+        self.agent_n = [TD3(args, agent_id) for agent_id in range(self.args.N)]
 
         # Initialize replay buffer:
         self.replay_buffer = ReplayBuffer(self.args)
         
         # Load trained models for evaluation:
         if self.args.test_model:
-            if self.framework == "CTDE":
-                total_steps, agent_id = 2180_000, 0  # edit 'total_steps' accordingly
-                # self.agent_n[agent_id].load(self.framework, total_steps, agent_id, self.seed)  # test best models
-                self.agent_n[agent_id].load_solved_model(self.framework, total_steps, agent_id, self.seed)  # test solved models
-                total_steps, agent_id = 1440_000, 1  # edit 'total_steps' accordingly
-                # self.agent_n[agent_id].load(self.framework, total_steps, agent_id, self.seed)  # test best models 
-                self.agent_n[agent_id].load_solved_model(self.framework, total_steps, agent_id, self.seed)  # test solved models
-            if self.framework == "DTDE":
-                total_steps, agent_id = 1710_000, 0  # edit 'total_steps' accordingly
-                # self.agent_n[agent_id].load(self.framework, total_steps, agent_id, self.seed)
-                self.agent_n[agent_id].load_solved_model(self.framework, total_steps, agent_id, self.seed)
-                total_steps, agent_id = 1480_000, 1  # edit 'total_steps' accordingly
-                # self.agent_n[agent_id].load(self.framework, total_steps, agent_id, self.seed)
-                self.agent_n[agent_id].load_solved_model(self.framework, total_steps, agent_id, self.seed)
-            elif self.framework == "SARL":
-                total_steps, agent_id = 1580_000, 0  # edit 'total_steps' accordingly
-                # self.agent_n[agent_id].load(self.framework, total_steps, agent_id, self.seed)
-                self.agent_n[agent_id].load_solved_model(self.framework, total_steps, agent_id, self.seed)
+            total_steps, agent_id = 1580_000, 0  # edit 'total_steps' accordingly
+            # self.agent_n[agent_id].load(self.framework, total_steps, agent_id, self.seed)
+            self.agent_n[agent_id].load_solved_model(self.framework, total_steps, agent_id, self.seed)
 
 
     def train_policy(self):
@@ -103,12 +70,10 @@ class Learner:
         log_eval = open(log_eval_path,"w+")  # total reward during evaluation w.r.t. total timesteps
 
         # Initialize the environment:
-        obs_n, done_episode, b1d = self.env.reset(env_type='train', seed=self.seed), False, self.env.b1d
+        obs_n, done_episode = self.env.reset(env_type='train', seed=self.seed), False
+        action = np.zeros(4) # init action
         max_total_reward = [0.8 * self.eval_max_steps, 0.8 * self.eval_max_steps]  # starte saving best models after agents achieve 80% of the total reward for each episode
-        if self.framework in ("CTDE","DTDE"):
-            episode_reward = [0.,0.]
-        elif self.framework == "SARL":
-            episode_reward = [0.]
+        episode_reward = [0.]
         episode_timesteps = 0
 
         # Training loop:
@@ -117,11 +82,14 @@ class Learner:
             episode_timesteps += 1
 
             # Each agent selects actions based on its own local observations with exploration noise:
+            prev_act = action # previous action; a(t-1)
             if self.total_timesteps < self.args.start_timesteps:  # select actions randomly
                 act_n = [np.random.rand(action_dim_n) * 2 - 1 for action_dim_n in self.args.action_dim_n]  # random actions between -1 and 1
             else:  # select actions from trained policies
+                obs_n = [obs_n]
                 act_n = [agent.choose_action(obs, explor_noise_std=self.explor_noise_std) for agent, obs in zip(self.agent_n, obs_n)]
             action = np.concatenate((act_n), axis=None)
+            self.env.set_prev_currunt_acts(prev_act, action)
 
             # Perform actions in the environment:
             obs_next_n, r_n, done_n, _, _ = self.env.step(copy.deepcopy(action))
@@ -129,12 +97,9 @@ class Learner:
             # Episode termination:
             state = self.env.get_current_state()
             ex_m = np.round(state[0:3]*self.env.x_lim, 5)  # position error in [m]
-            eb1_rad = ang_btw_two_vectors(b1d, state[6:9])  # heading error in [rad]
             if episode_timesteps == self.args.max_steps:  # episode terminated!
                 done_episode = True
                 done_n[0] = True if (abs(ex_m) <= 0.05).all() else False  # problem is solved! when ex < 0.05m
-                if self.framework in ("CTDE","DTDE"):
-                    done_n[1] = True if abs(eb1_rad) <= 0.03 else False  # problem is solved! when eb1 < 0.03rad
         
             # Store a set of transitions in replay buffer:
             self.replay_buffer.store_transition(obs_n, act_n, r_n, obs_next_n, done_n)
@@ -149,22 +114,17 @@ class Learner:
 
             # If done_episode:
             if any(done_n) == True or done_episode == True:
-                print(f"total_timestpes: {self.total_timesteps+1}, time_stpes: {episode_timesteps}, reward: {episode_reward}, ex: {ex_m}, eb1: {eb1_rad:.3f}")
+                print(f"total_timestpes: {self.total_timesteps+1}, time_stpes: {episode_timesteps}, reward: {episode_reward}, ex: {ex_m}")
 
                 # Log data:
                 if self.total_timesteps >= self.args.start_timesteps:
-                    if self.framework in ("CTDE","DTDE"):
-                        log_step.write('{}\t {}\n'.format(self.total_timesteps, episode_reward))
-                    elif self.framework == "SARL":
-                        log_step.write('{}\t {}\n'.format(self.total_timesteps, episode_reward))
+                    log_step.write('{}\t {}\n'.format(self.total_timesteps, episode_reward))
                     log_step.flush()
                 
                 # Reset environment:
-                obs_n, done_episode, b1d = self.env.reset(env_type='train', seed=self.seed), False, self.env.b1d
-                if self.framework in ("CTDE","DTDE"):
-                    episode_reward = [0.,0.]
-                elif self.framework == "SARL":
-                    episode_reward = [0.]
+                obs_n, done_episode = self.env.reset(env_type='train', seed=self.seed), False
+                action = np.zeros(4) # init action
+                episode_reward = [0.]
                 episode_timesteps = 0
 
             # Decay explor_noise_std:
@@ -176,10 +136,7 @@ class Learner:
                 eval_reward, benchmark_reward = self.eval_policy()
 
                 # Logging updates:
-                if self.framework in ("CTDE","DTDE"):
-                    log_eval.write('{}\t {}\t {}\n'.format(self.total_timesteps, benchmark_reward, eval_reward))
-                elif self.framework == "SARL":
-                    log_eval.write('{}\t {}\t {}\n'.format(self.total_timesteps, benchmark_reward, eval_reward))
+                log_eval.write('{}\t {}\t {}\n'.format(self.total_timesteps, benchmark_reward, eval_reward))
                 log_eval.flush()
 
                 # Save best model:
@@ -194,10 +151,11 @@ class Learner:
 
     def eval_policy(self):
         # Make OpenAI Gym environment for evaluation:
-        if self.framework in ("CTDE","DTDE"):
-            eval_env = DecoupledWrapper()
-        elif self.framework == "SARL":
-            eval_env = CoupledWrapper()
+        """---------------------------------------------------------------------------------
+        | Agents  | Observations    | obs_dim | Actions:      | act_dim | Rewards          |
+        | #agent  | {ex, ev, R, eW} | 18      | {T1,T2,T3,T4} | 4       | f(ex, ev, eW, a) |
+        ---------------------------------------------------------------------------------"""
+        eval_env = gym.make("Quad-v0")
 
         # Fixed seed is used for the eval environment:
         seed = 123
@@ -208,10 +166,7 @@ class Learner:
 
         # Save rewards and models:
         success_count = []
-        if self.framework in ("CTDE","DTDE"):
-            success, eval_reward = [False,False], [0.,0.]
-        elif self.framework == "SARL":
-            success, eval_reward = [False], [0.]
+        success, eval_reward = [False], [0.]
         benchmark_reward = 0. # Reward for benchmark
 
         print("---------------------------------------------------------------------------------------------------------------------")
@@ -232,12 +187,8 @@ class Learner:
 
             # Reset envs, timesteps, and reward:
             obs_n = eval_env.reset(env_type='eval', seed=self.seed)
-            if self.framework in ("CTDE","DTDE"):
-                episode_reward = [0.,0.]
-            elif self.framework == "SARL":
-                episode_reward = [0.]
+            episode_reward = [0.]
             episode_timesteps = 0
-            episode_benchmark_reward = 0.
 
             # Evaluation loop:
             for _ in range(int(self.eval_max_steps)):
@@ -245,9 +196,9 @@ class Learner:
 
                 # Generate trajectory:
                 state = eval_env.get_current_state()
-                xd, vd, b1d, b3d, Wd = self.trajectory.get_desired(state, mode)
-                eval_env.set_goal_pos(xd, b1d)
-                error_obs_n, error_state = self.trajectory.get_error_state(self.framework)
+                xd, vd, Wd = self.trajectory.get_desired(state, mode)
+                eval_env.set_goal_pos(xd)
+                error_obs_n, error_state = self.trajectory.get_error_state()
 
                 # Actions without exploration noise:
                 act_n = [agent.choose_action(obs, explor_noise_std=0.) for agent, obs in zip(self.agent_n, error_obs_n)] # obs_n
@@ -260,31 +211,23 @@ class Learner:
 
                 # Cumulative rewards:
                 episode_reward = [float('{:.4f}'.format(episode_reward[agent_id]+r)) for agent_id, r in zip(range(self.args.N), r_n)]
-                episode_benchmark_reward += benchmark_reward_func(error_state, args)
 
                 # Save data:
                 if self.args.save_log:
-                    eIx, eb1, eIb1 = error_state[3], error_state[4], error_state[5]
                     act_list.append(action)
-                    obs_list.append(np.concatenate((state, eIx, eb1, eIb1), axis=None))
-                    cmd_list.append(np.concatenate((xd, vd, b1d, b3d, Wd), axis=None))
+                    obs_list.append(np.concatenate((state), axis=None))
+                    cmd_list.append(np.concatenate((xd, vd, Wd), axis=None))
 
                 # Episode termination:
                 if any(done_n) or episode_timesteps == self.eval_max_steps:
                     ex_m = np.round(state[0:3]*self.env.x_lim, 5)  # position error [m]
-                    eb1_rad = ang_btw_two_vectors(b1d, state[6:9]) # heading error [rad]
-                    if self.framework in ("CTDE","DTDE"):
-                        success[0] = True if (abs(ex_m) <= 0.05).all() else False
-                        success[1] = True if abs(eb1_rad) <= 0.02 else False
-                    elif self.framework == "SARL":
-                        success[0] = True if (abs(ex_m) <= 0.05).all() else False
-                    print(f"eval_iter: {num_eval+1}, time_stpes: {episode_timesteps}, episode_reward: {episode_reward}, episode_benchmark_reward: {episode_benchmark_reward:.3f}, ex: {ex_m}, eb1: {eb1_rad:.3f}")
+                    success[0] = True if (abs(ex_m) <= 0.05).all() else False
+                    print(f"eval_iter: {num_eval+1}, time_stpes: {episode_timesteps}, episode_reward: {episode_reward}, ex: {ex_m}")
                     success_count.append(success)
                     break
 
             # Compute total evaluation rewards:
             eval_reward = [eval_reward[agent_id]+epi_r for agent_id, epi_r in zip(range(self.args.N), episode_reward)]
-            benchmark_reward += episode_benchmark_reward
 
             # Save data:
             if self.args.save_log:

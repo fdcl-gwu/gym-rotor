@@ -71,34 +71,14 @@ class QuadEnv(gym.Env):
         self.framework = args.framework
         self.reward_alive = 0.  # ≥ 0 is a bonus value earned by the agent for staying alive
         self.reward_crash = -1. # Out of boundary or crashed!
-        self.Cx  = args.Cx
-        self.CIx = args.CIx
-        self.Cv  = args.Cv
-        self.Cb1  = args.Cb1
-        self.CIb1 = args.CIb1
-        self.Cb3  = args.Cb3
-        self.CW = args.Cw12
-        self.reward_min = -np.ceil(self.Cx+self.CIx+self.Cv+self.Cb1+self.CIb1+self.Cb3+self.CW)
-        if self.framework in ("CTDE","DTDE"):
-            # Agent1's reward:
-            self.Cw12 = args.Cw12
-            self.reward_min_1 = -np.ceil(self.Cx+self.CIx+self.Cv+self.Cb3+self.Cw12)
-            # Agent2's reward:
-            self.CW3 = args.CW3
-            self.reward_min_2 = -np.ceil(self.Cb1+self.CW3+self.CIb1)
-        
-        # Integral terms:
-        self.use_integral = True
-        self.sat_sigma = 1.
-        self.eIX = IntegralErrorVec3() # Position integral error
-        self.eIR = IntegralError() # Attitude integral error
-        self.eIX.set_zero() # Set all integrals to zero
-        self.eIR.set_zero()
+        self.Cx = args.Cx # pos coef.
+        self.Cv = args.Cv # vel coef.
+        self.CW = args.CW # ang_vel coef.
+        self.Ca = args.Ca # action smooth coef.
 
         # Commands:
         self.xd  = np.array([0.,0.,0.]) # desired tracking position command, [m] 
         self.vd  = np.array([0.,0.,0.]) # [m/s]
-        self.b1d = np.array([1.,0.,0.]) # desired heading direction        
         self.Rd  = np.eye(3)
 
         # Limits of states:
@@ -126,8 +106,6 @@ class QuadEnv(gym.Env):
         self.action_space = spaces.Box(
             low=-1.0, 
             high=1.0, 
-            # low=self.min_force, 
-            # high=self.max_force, 
             shape=(4,),
             dtype=np.float64
         ) 
@@ -149,20 +127,12 @@ class QuadEnv(gym.Env):
         obs = self.observation_wrapper(state)
 
         # Reward function:
-        reward = self.reward_wrapper(obs)
-        if self.framework in ("CTDE","DTDE"):
-            reward[0] = interp(reward[0], [self.reward_min_1, 0.], [0., 1.]) # linear interpolation [0,1]
-            reward[1] = interp(reward[1], [self.reward_min_2, 0.], [0., 1.]) # linear interpolation [0,1]
-        elif self.framework == "SARL":
-            reward[0] = interp(reward[0], [self.reward_min, 0.], [0., 1.]) # linear interpolation [0,1]  
+        reward = self.reward_wrapper(obs) 
 
         # Terminal condition:
         done = self.done_wrapper(obs)
         if done[0]: # Out of boundary or crashed!
             reward[0] = self.reward_crash
-        if self.framework in ("CTDE","DTDE"):
-            if done[1]: # Out of boundary or crashed!
-                reward[1] = self.reward_crash
 
         return obs, reward, done, False, {}
 
@@ -197,10 +167,6 @@ class QuadEnv(gym.Env):
         yaw = uniform(size=1,low=-pi, high=pi) 
         euler = np.concatenate((roll_pitch, yaw), axis=None)
         R = Rotation.from_euler('xyz', euler, degrees=False).as_matrix()
-        # get_current_b1
-        b1 = R.dot(self.e1)
-        theta = np.arctan2(b1[1], b1[0])
-        self.b1d = np.array([np.cos(theta), np.sin(theta), 0.]) 
         # Re-orthonormalize:
         if not isRotationMatrix(R):
             U, s, VT = psvd(R)
@@ -218,10 +184,7 @@ class QuadEnv(gym.Env):
         self.f3 = self.hover_force
         self.f4 = self.hover_force
         self.M  = np.zeros(3)
-
-        # Integral terms:
-        self.eIX.set_zero() # Set all integrals to zero
-        self.eIR.set_zero()
+        self.prev_act, self.currunt_act = np.zeros(4), np.zeros(4)
 
         return np.array(self.state)
 
@@ -280,35 +243,20 @@ class QuadEnv(gym.Env):
         # Decomposing state vectors
         x, v, R, W = state_decomposition(obs)
 
-        # Reward function coefficients:
-        Cx = self.Cx # pos coef.
-        Cb1 = self.Cb1 # heading coef.
-        Cv = self.Cv # vel coef.
-        CW = self.CW # ang_vel coef.
-
         # Errors:
         eX = x - self.xd # position error
         eV = v - self.vd # velocity error
-        # Heading errors:
-        eb1 = norm_ang_btw_two_vectors(self.b1d, get_current_b1(R)) # [-1, 1)
-        # Attitude errors:
-        '''
-        RdT_R = self.Rd.T @ R
-        eR = 0.5*(np.eye(3) - RdT_R).trace() # eR = 0.5 * vee(RdT_R - RdT_R.T).flatten()
-        eR *= 0.5 # [0,2] -> [0,1]
-        eR = 0.5 * vee(RdT_R - RdT_R.T).flatten()
-        '''
 
         # Reward function:
-        reward_eX = -Cx*(norm(eX, 2)**2) 
-        reward_eb1  = -Cb1*(abs(eb1)) # [0., pi] -> [0., 1.0]
-        reward_eV = -Cv*(norm(eV, 2)**2)
-        reward_eW = -CW*(norm(W, 2)**2)
+        reward_eX  = self.Cx*(1. - norm(eX, 2))
+        reward_eV  = -self.Cv*norm(eV, 2)
+        reward_eW  = -self.CW*norm(W, 2)
+        reward_Act = -self.Ca*(norm(self.currunt_act - self.prev_act, 2))
+        
+        reward = self.reward_alive + (reward_eX + reward_eV + reward_eW + reward_Act)
+        reward *= 0.1 # rescaled by a factor of 0.1
 
-        reward = self.reward_alive + (reward_eX + reward_eb1 + reward_eV + reward_eW)
-        #reward *= 0.1 # rescaled by a factor of 0.1
-
-        return reward
+        return [reward]
 
 
     def done_wrapper(self, obs):
@@ -328,7 +276,7 @@ class QuadEnv(gym.Env):
             or abs(euler[1]) >= self.euler_lim # theta
         )
 
-        return done
+        return [done]
 
 
     def EoM(self, t, state):
@@ -420,9 +368,13 @@ class QuadEnv(gym.Env):
         return self.state
 
 
-    def set_goal_pos(self, xd_vis, b1d_vis):
+    def set_prev_currunt_acts(self, prev_act, currunt_action):
+        self.prev_act = prev_act
+        self.currunt_act = currunt_action
+
+
+    def set_goal_pos(self, xd_vis):
         self.xd_vis = xd_vis*self.x_lim
-        self.b1d_vis = b1d_vis
 
 
     def render(self, mode='human', close=False):
@@ -437,8 +389,6 @@ class QuadEnv(gym.Env):
         # Quadrotor and goal positions:
         quad_pos = x # [m]
         cmd_pos  = self.xd_vis # [m]
-        # Heading commands:
-        b1d_vis = self.b1d_vis
 
         # Axis:
         x_axis = np.array([state_vis[6], state_vis[7], state_vis[8]])
@@ -491,10 +441,7 @@ class QuadEnv(gym.Env):
             # Commands.
             self.render_xd = sphere(canvas=self.viewer, pos=vector(cmd_pos[0], cmd_pos[1], cmd_pos[2]), \
                                      radius=0.07, color=color.red, \
-                                     make_trail=True, trail_type='points', interval=10)		
-            self.render_b1d = arrow(canvas=self.viewer, pos=vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
-                                     axis=vector(b1d_vis[0], b1d_vis[1], b1d_vis[2]), \
-                                     shaftwidth=0.03, color=color.orange)							
+                                     make_trail=True, trail_type='points', interval=10)								
             
             # Inertial axis.				
             self.e1_axis = arrow(pos=vector(2.5, -2.5, 0), axis=0.5*vector(1, 0, 0), \
@@ -629,14 +576,6 @@ class QuadEnv(gym.Env):
         self.render_xd.pos.x = cmd_pos[0]
         self.render_xd.pos.y = cmd_pos[1]
         self.render_xd.pos.z = cmd_pos[2]
-
-        axis_offest = 0.9
-        self.render_b1d.pos.x = quad_pos[0]
-        self.render_b1d.pos.y = quad_pos[1]
-        self.render_b1d.pos.z = quad_pos[2]
-        self.render_b1d.axis.x = axis_offest * b1d_vis[0] 
-        self.render_b1d.axis.y = axis_offest * b1d_vis[1] 
-        self.render_b1d.axis.z = axis_offest * b1d_vis[2] 
         
         # Update body axis.
         axis_offest = 0.8
