@@ -331,7 +331,6 @@ class QuadEnv(gym.Env):
         return done
 
 
-    # https://youtu.be/iS5JFuopQsA
     def EoM(self, t, state):
         # Decomposing state vectors
         x, v, R, W = state_decomposition(state)

@@ -3,9 +3,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.optim.lr_scheduler import CyclicLR, CosineAnnealingWarmRestarts
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
-from algos.networks import Actor, Critic_TD3
+from algos.networks.mlp import Actor, Critic_TD3
+from algos.networks.emlp import Equiv_Actor_SARL, Equiv_Critic_SARL
 
 if torch.cuda.is_available():
     device = torch.device("cuda")
@@ -19,7 +20,6 @@ else:
 
 class TD3(object):
     def __init__(self, args, agent_id):
-        
         self.framework = args.framework
         self.N = args.N
         self.agent_id = agent_id
@@ -37,24 +37,27 @@ class TD3(object):
         self.lam_T, self.lam_S, self.lam_M = args.lam_T, args.lam_S, args.lam_M
         self.total_it = 0
 
-        self.actor = Actor(args, agent_id).to(device)
-        self.actor_target = copy.deepcopy(self.actor)
-        self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=self.lr_a)
-        self.actor_scheduler = CosineAnnealingWarmRestarts(self.actor_optimizer, T_0=3500000, eta_min=1e-6)
-        '''
-        self.actor_scheduler = CyclicLR(self.actor_optimizer, base_lr = 1e-6,  max_lr = 5e-4, \
-            cycle_momentum = False, mode='triangular') # {triangular, triangular2, exp_range}
-        '''
+        # Train models with equivariant reinforcement learning:
+        if args.use_equiv:
+            self.actor = Equiv_Actor_SARL(args, agent_id).to(device)
+            self.actor_target = copy.deepcopy(self.actor)
+            self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=self.lr_a)
+            self.actor_scheduler = CosineAnnealingWarmRestarts(self.actor_optimizer, T_0=3500000, eta_min=1e-6)
 
-        self.critic = Critic_TD3(args, agent_id).to(device)
-        self.critic_target = copy.deepcopy(self.critic)
-        self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=self.lr_c)
-        self.critic_scheduler = CosineAnnealingWarmRestarts(self.critic_optimizer, T_0=3500000, eta_min=1e-6)
-        '''
-        self.critic_scheduler = CyclicLR(self.critic_optimizer, base_lr = 1e-6,  max_lr = 5e-4, \
-            cycle_momentum = False, mode='triangular') # {triangular, triangular2, exp_range}
-        '''
+            self.critic = Equiv_Critic_SARL(args, agent_id).to(device)
+            self.critic_target = copy.deepcopy(self.critic)
+            self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=self.lr_c)
+            self.critic_scheduler = CosineAnnealingWarmRestarts(self.critic_optimizer, T_0=3500000, eta_min=1e-6)
+        else:
+            self.actor = Actor(args, agent_id).to(device)
+            self.actor_target = copy.deepcopy(self.actor)
+            self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=self.lr_a)
+            self.actor_scheduler = CosineAnnealingWarmRestarts(self.actor_optimizer, T_0=3500000, eta_min=1e-6)
 
+            self.critic = Critic_TD3(args, agent_id).to(device)
+            self.critic_target = copy.deepcopy(self.critic)
+            self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=self.lr_c)
+            self.critic_scheduler = CosineAnnealingWarmRestarts(self.critic_optimizer, T_0=3500000, eta_min=1e-6)
 
     # Each agent selects actions based on its own local observations(add noise for exploration)
     def choose_action(self, obs, explor_noise_std):

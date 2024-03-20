@@ -7,7 +7,7 @@ OpenAI Gym environments for a quadrotor UAV control
 
 ### ***Learn by Doing***
 
-This repository contains OpenAI Gym environments and PyTorch implementations of [DDPG](https://arxiv.org/abs/1509.02971) and [TD3](https://arxiv.org/abs/1802.09477), for low-level control of quadrotor unmanned aerial vehicles. 
+This repository contains OpenAI Gym environments and PyTorch implementations of [TD3](https://arxiv.org/abs/1802.09477) and [MATD3](https://arxiv.org/abs/1910.01465), for low-level control of quadrotor unmanned aerial vehicles. 
 To better understand **What Deep RL Do**, see [OpenAI Spinning UP](https://spinningup.openai.com/en/latest/index.html).
 Please don't hesitate to create new issues or pull requests for any suggestions and corrections. 
 - We have recently switched from [Gym](https://www.gymlibrary.dev/) to [Gymnasium](https://gymnasium.farama.org/), but our previous Gym-based environments are still available [here](https://github.com/fdcl-gwu/gym-rotor/tree/gym).
@@ -93,11 +93,13 @@ If you find this work useful in your own work or would like to cite it, please g
   year={2023}
 }
 
-@article{yu2022equivariant,
+@inproceedings{yu2023equivariant,
   title={Equivariant Reinforcement Learning for Quadrotor UAV},
   author={Yu, Beomyeol and Lee, Taeyoung},
-  journal={arXiv preprint arXiv:2206.01233},
-  year={2022}
+  booktitle={2023 American Control Conference (ACC)},
+  pages={2842--2847},
+  year={2023},
+  organization={IEEE}
 }
 ```
 

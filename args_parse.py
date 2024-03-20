@@ -41,6 +41,7 @@ def create_parser():
     parser.add_argument("--lr_c", default=[1e-4, 1e-4], type=float, help="Learning rate of critic, alpha (default: 1e-5)")
     parser.add_argument('--discount', default=0.99, type=float, metavar='G', help='discount factor, discount (default: 0.99)')
     parser.add_argument("--max_action", default=1., type=float, help="Max action")
+    parser.add_argument("--use_equiv", default=False, type=bool, help="Train models with equivariant reinforcement learning")
     parser.add_argument("--use_clip_grad_norm", default=True, type=bool, help="Clips gradient norm of parameters")
     parser.add_argument("--grad_max_norm", default=100., type=float, help="max norm of the gradients")
     parser.add_argument("--use_explor_noise_decay", default=True, type=bool, help="Whether to decay the explor_noise_std")

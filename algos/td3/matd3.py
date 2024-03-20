@@ -2,9 +2,9 @@ import copy
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch.optim.lr_scheduler import CyclicLR, CosineAnnealingWarmRestarts
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
-from algos.networks import Actor, Critic_MATD3
+from algos.networks.mlp import Actor, Critic_MATD3
 
 if torch.cuda.is_available():
     device = torch.device("cuda")
@@ -39,19 +39,11 @@ class MATD3(object):
         self.actor_target = copy.deepcopy(self.actor)
         self.actor_optimizer = torch.optim.AdamW(self.actor.parameters(), lr=self.lr_a)
         self.actor_scheduler = CosineAnnealingWarmRestarts(self.actor_optimizer, T_0=3500000, eta_min=1e-6)
-        '''
-        self.actor_scheduler = CyclicLR(self.actor_optimizer, base_lr = 1e-6,  max_lr = 5e-4, \
-            cycle_momentum = False, mode='triangular') # {triangular, triangular2, exp_range}
-        '''
         
         self.critic = Critic_MATD3(args).to(device)
         self.critic_target = copy.deepcopy(self.critic)
         self.critic_optimizer = torch.optim.AdamW(self.critic.parameters(), lr=self.lr_c)
         self.critic_scheduler = CosineAnnealingWarmRestarts(self.critic_optimizer, T_0=3500000, eta_min=1e-6)
-        '''
-        self.critic_scheduler = CyclicLR(self.critic_optimizer, base_lr = 1e-6,  max_lr = 5e-4, \
-            cycle_momentum = False, mode='triangular') # {triangular, triangular2, exp_range}
-        '''
 
 
     # Each agent selects actions based on its own local observations(add noise for exploration)
