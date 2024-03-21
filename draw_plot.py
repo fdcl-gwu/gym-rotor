@@ -163,20 +163,17 @@ if is_SAVE:
 #########################################################################
 fig, axs = plt.subplots(3, 3, figsize=(30, 12))
 
-axs[0, 0].plot(t, b1d1, 'tab:red', linewidth=3, label='$b_{1d_1}$')
 axs[0, 0].plot(t, R11, linewidth=3, label='response')
 axs[0, 0].set_ylabel('$R_{11}$', size=fontsize)
 axs[0, 0].grid(True, color='white', linestyle='-', linewidth=1.0)
 axs[0, 0].legend(ncol=1, prop={'size': fontsize}, loc='best')
 # axs[0, 0].set_yticks(np.arange(0.97, 1.0, 0.01))
 
-axs[1, 0].plot(t, b1d2, 'tab:red', linewidth=3, label='$b_{1d_2}$')
 axs[1, 0].plot(t, R21, linewidth=3)
 axs[1, 0].set_ylabel('$R_{21}$', size=fontsize)
 axs[1, 0].legend(ncol=1, prop={'size': fontsize}, loc='best')
 # axs[1, 0].set_title('$R_{21}$')
 
-axs[2, 0].plot(t, b1d3, 'tab:red', linewidth=3, label='$b_{1d_3}$')
 axs[2, 0].plot(t, R31, linewidth=3)
 axs[2, 0].set_ylabel('$R_{31}$', size=fontsize)
 axs[2, 0].set_xlabel('Time [s]', size=fontsize)
@@ -198,20 +195,17 @@ axs[2, 1].set_ylabel('$R_{32}$', size=fontsize)
 axs[2, 1].set_xlabel('Time [s]', size=fontsize)
 # axs[2, 1].set_title('$R_{32}$')
 
-axs[0, 2].plot(t, b3d1, 'tab:red', linewidth=3, label='$b_{3d_1}$')
 axs[0, 2].plot(t, R13, linewidth=3)
 axs[0, 2].set_ylabel('$R_{13}$', size=fontsize)
 axs[0, 2].legend(ncol=1, prop={'size': fontsize}, loc='best')
 # axs[0, 2].set_title('$R_{13}$')
 # axs[0, 2].set_yticks(np.arange(-0.10, 0.05, 0.05))
 
-axs[1, 2].plot(t, b3d2, 'tab:red', linewidth=3, label='$b_{3d_2}$')
 axs[1, 2].plot(t, R23, linewidth=3)
 axs[1, 2].set_ylabel('$R_{23}$', size=fontsize)
 axs[1, 2].legend(ncol=1, prop={'size': fontsize}, loc='best')
 # axs[1, 2].set_title('$R_{23}$')
 
-axs[2, 2].plot(t, b3d3, 'tab:red', linewidth=3, label='$b_{3d_3}$')
 axs[2, 2].plot(t, R33, linewidth=3)
 axs[2, 2].set_ylabel('$R_{33}$', size=fontsize)
 axs[2, 2].set_xlabel('Time [s]', size=fontsize)
@@ -245,65 +239,5 @@ for label in (axs[2, 2].get_xticklabels() + axs[2, 2].get_yticklabels()):
 
 if is_SAVE:
     plt.savefig(os.path.join('./results', file_name[:4]+file_name[8:]+'_R'+'.png'), bbox_inches='tight')
-
-##########################################################################
-#################### Plot ex, eIx, eb1, and  eIb1R #######################
-##########################################################################
-ex1, ex2, ex3 = x1 - xd1, x2 - xd2, x3 - xd3
-print('========================================================================')
-print(f"avg_eX1 [m]: {sum(abs(ex1))/ex1.size:.2f}, avg_eX2 [m]: {sum(abs(ex2))/ex2.size:.2f}, avg_eX3 [m]: {sum(abs(ex3))/ex3.size:.2f}")
-print(f"avg_eX1 [cm]: {sum(abs(ex1))*100/ex1.size:.2f}, avg_eX2 [cm]: {sum(abs(ex2))*100/ex2.size:.2f}, avg_eX3 [cm]: {sum(abs(ex3))*100/ex3.size:.2f}")
-print(f"avg_yaw [rad]: {sum(abs(eb1))/eb1.size:.2f}, avg_yaw [deg]: {sum(abs(eb1)*180/np.pi)/eb1.size:.2f}")
-print('========================================================================')
-
-fig, axs = plt.subplots(3, 3, figsize=(30, 12))
-axs[0, 0].plot(t, ex1, linewidth=3, label='$e_{x_1}$')
-axs[0, 0].set_ylabel('$e_{x_1}$ [m]', size=fontsize)
-
-axs[0, 1].plot(t, ex2, linewidth=3, label='$e_{x_2}$')
-axs[0, 1].set_ylabel('$e_{x_2}$ [m]', size=fontsize)
-
-axs[0, 2].plot(t, ex3, linewidth=3, label='$e_{x_3}$')
-axs[0, 2].set_ylabel('$e_{x_3}$ [m]', size=fontsize)
-
-axs[1, 0].plot(t, eIx1, linewidth=3, label='$eI_{x_1}$')
-axs[1, 0].set_ylabel('$e_{I_{x_1}}$', size=fontsize)
-
-axs[1, 1].plot(t, eIx2, linewidth=3, label='$eI_{x_2}$')
-axs[1, 1].set_ylabel('$e_{I_{x_2}}$', size=fontsize)
-
-axs[1, 2].plot(t, eIx3, linewidth=3, label='$eI_{x_3}$')
-axs[1, 2].set_ylabel('$e_{I_{x_3}}$', size=fontsize)
-
-axs[2, 0].plot(t, eb1, linewidth=3, label='$e_{R_1}$')
-axs[2, 0].set_ylabel('$e_{b_1}$', size=fontsize)
-
-axs[2, 1].plot(t, eIb1, linewidth=3, label='$e_{R_2}$')
-axs[2, 1].set_ylabel('$e_{I_{b_1}}$', size=fontsize)
-
-for i in range(3):
-    for j in range(3):
-        axs[i, j].set_xlim([0., t[-1]])
-        axs[i, j].grid(True, color='white', linestyle='-', linewidth=1.0)
-        # axs[i, j].legend(ncol=1, prop={'size': fontsize}, loc='lower right')
-        axs[i, j].locator_params(axis='y', nbins=4)
-for label in (axs[0, 0].get_xticklabels() + axs[0, 0].get_yticklabels()):
-	label.set_fontsize(fontsize)
-for label in (axs[0, 1].get_xticklabels() + axs[0, 1].get_yticklabels()):
-	label.set_fontsize(fontsize)
-for label in (axs[0, 2].get_xticklabels() + axs[0, 2].get_yticklabels()):
-	label.set_fontsize(fontsize)
-for label in (axs[1, 0].get_xticklabels() + axs[1, 0].get_yticklabels()):
-	label.set_fontsize(fontsize)
-for label in (axs[1, 1].get_xticklabels() + axs[1, 1].get_yticklabels()):
-	label.set_fontsize(fontsize)
-for label in (axs[1, 2].get_xticklabels() + axs[1, 2].get_yticklabels()):
-	label.set_fontsize(fontsize)
-for label in (axs[2, 0].get_xticklabels() + axs[2, 0].get_yticklabels()):
-	label.set_fontsize(fontsize)
-for label in (axs[2, 1].get_xticklabels() + axs[2, 1].get_yticklabels()):
-	label.set_fontsize(fontsize)
-if is_SAVE:
-    plt.savefig(os.path.join('./results', file_name[:4]+file_name[8:]+'_eIx_eIb1'+'.png'), bbox_inches='tight')
 else:
     plt.show()

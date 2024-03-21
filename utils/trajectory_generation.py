@@ -337,7 +337,6 @@ class TrajectoryGeneration:
             self.b1d = np.array([1.,0.,0.]) 
             self.b1d_dot, self.b1d_2dot = np.zeros(3), np.zeros(3)
             '''
-            
         else:
             self.mark_traj_end(True)
             
@@ -351,6 +350,5 @@ class TrajectoryGeneration:
         R_vec = self.R.reshape(9, 1, order='F').flatten()
         obs = np.concatenate((ex_norm, ev_norm, R_vec, eW_norm), axis=None)
         error_obs_n = [obs]
-        error_state = (ex_norm, ev_norm, eW_norm)
         
-        return error_obs_n, error_state
+        return error_obs_n

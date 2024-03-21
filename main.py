@@ -133,10 +133,10 @@ class Learner:
 
             # Evaluate policy:
             if self.total_timesteps % self.args.eval_freq == 0 and self.total_timesteps > self.args.start_timesteps:
-                eval_reward, benchmark_reward = self.eval_policy()
+                eval_reward = self.eval_policy()
 
                 # Logging updates:
-                log_eval.write('{}\t {}\t {}\n'.format(self.total_timesteps, benchmark_reward, eval_reward))
+                log_eval.write('{}\t {}\t {}\n'.format(self.total_timesteps, eval_reward))
                 log_eval.flush()
 
                 # Save best model:
@@ -167,7 +167,6 @@ class Learner:
         # Save rewards and models:
         success_count = []
         success, eval_reward = [False], [0.]
-        benchmark_reward = 0. # Reward for benchmark
 
         print("---------------------------------------------------------------------------------------------------------------------")
         for num_eval in range(self.args.num_eval):
@@ -198,7 +197,7 @@ class Learner:
                 state = eval_env.get_current_state()
                 xd, vd, Wd = self.trajectory.get_desired(state, mode)
                 eval_env.set_goal_pos(xd)
-                error_obs_n, error_state = self.trajectory.get_error_state()
+                error_obs_n = self.trajectory.get_error_state()
 
                 # Actions without exploration noise:
                 act_n = [agent.choose_action(obs, explor_noise_std=0.) for agent, obs in zip(self.agent_n, error_obs_n)] # obs_n
@@ -241,9 +240,8 @@ class Learner:
 
         # Average reward:
         eval_reward = [float('{:.4f}'.format(eval_r/self.args.num_eval)) for eval_r in eval_reward]
-        benchmark_reward = float('{:.4f}'.format(benchmark_reward/self.args.num_eval))
         print("--------------------------------------------------------------------------------------------------------------------------------")
-        print(f"total_timesteps: {self.total_timesteps} \t eval_reward: {eval_reward} \t benchmark_reward: {benchmark_reward} \t explor_noise_std: {self.explor_noise_std}")
+        print(f"total_timesteps: {self.total_timesteps} \t eval_reward: {eval_reward} \t explor_noise_std: {self.explor_noise_std}")
         print("--------------------------------------------------------------------------------------------------------------------------------")
         sys.exit("The trained agent has been test!") if self.args.test_model == True else None
 
@@ -252,7 +250,7 @@ class Learner:
             if all(i[agent_id] == True for i in success_count) and self.args.save_model == True: # Problem is solved
                 self.agent_n[agent_id].save_solved_model(self.framework, self.total_timesteps, agent_id, self.seed)
 
-        return eval_reward, benchmark_reward
+        return eval_reward
         
         
 if __name__ == '__main__':
