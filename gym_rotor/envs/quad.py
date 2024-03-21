@@ -223,6 +223,10 @@ class QuadEnv(gym.Env):
         self.eIX.set_zero() # Set all integrals to zero
         self.eIR.set_zero()
 
+        # for drawing real-time plots:
+        self.t = 0
+        self.cmd_count = 0
+
         return np.array(self.state)
 
 
@@ -426,7 +430,8 @@ class QuadEnv(gym.Env):
 
 
     def render(self, mode='human', close=False):
-        from vpython import canvas, vector, box, sphere, color, rate, cylinder, arrow, ring, scene, textures
+        # https://engcourses-uofa.ca/wp-content/uploads/Visual-Python-VPython-ver-2.pdf
+        from vpython import canvas, vector, box, sphere, color, rate, cylinder, arrow, vec, graph, gcurve, gdots
 
         # Rendering state:
         state_vis = np.copy(self.state)
@@ -448,9 +453,9 @@ class QuadEnv(gym.Env):
         # Init:
         if self.viewer is None:
             # Canvas.
-            self.viewer = canvas(title='Quadrotor with RL', width=1024, height=768, \
+            self.viewer = canvas(title='Quadrotor with RL', width=1080, height=480, \
                                  center=vector(0, 0, cmd_pos[2]), background=color.white, \
-                                 forward=vector(1, 0.3, 0.3), up=vector(0, 0, -1)) # forward = view point
+                                 forward=vector(0.5, 0.3, 0.3), up=vector(0, 0, -1), range=2.0) # forward = view point
             
             # Quad body.
             self.render_quad1 = box(canvas=self.viewer, pos=vector(quad_pos[0], quad_pos[1], quad_pos[2]), \
@@ -520,12 +525,52 @@ class QuadEnv(gym.Env):
             # Floor.
             self.render_floor = box(pos=vector(0,0,0),size=vector(5,5,0.05), axis=vector(1,0,0), \
                                     opacity=0.2, color=color.black)
-
+        
+            # Real-time graphing.
+            self.gx1 = graph(width=270, height=150, xtitle='t (sec)', ytitle='x1 (m)', \
+                       foreground=vec(.5,.5,.5), background=color.white, align='left', fast=False)
+                       # xmin=0, xmax=-20, ymin=0, ymax=-20)
+            self.gc_x1d = gdots(graph=self.gx1, color=color.red, radius=2.)
+            self.gc_x1 = gcurve(graph=self.gx1, color=color.blue, dot=True, dot_radius=2)
+            self.gx2 = graph(width=270, height=150, xtitle='t (sec)', ytitle='x2 (m)', \
+                       foreground=vec(.5,.5,.5), background=color.white, align='left', fast=False)
+            self.gc_x2d = gdots(graph=self.gx2, color=color.red, radius=2.)
+            self.gc_x2 = gcurve(graph=self.gx2, color=color.blue, dot=True, dot_radius=2)
+            self.gx3 = graph(width=270, height=150, xtitle='t (sec)', ytitle='x3 (m)', \
+                       foreground=vec(.5,.5,.5), background=color.white, align='left', fast=False)
+            self.gc_x3d = gdots(graph=self.gx3, color=color.red, radius=2.)
+            self.gc_x3 = gcurve(graph=self.gx3, color=color.blue, dot=True, dot_radius=2)
+            self.gR11 = graph(width=270, height=150, xtitle='t (sec)', ytitle='R11', \
+                        foreground=vec(.5,.5,.5), background=color.white, align='left', fast=False)
+            self.gc_R11d = gdots(graph=self.gR11, color=color.red, radius=2.)
+            self.gc_R11 = gcurve(graph=self.gR11, color=color.blue, dot=True, dot_radius=2)
 
         # Update visualization component:
         if self.state is None: 
             return None
-
+        
+        # Update graphs.
+        if self.t == 0:  # delete all graphs
+            self.gc_x1d.delete()
+            self.gc_x1.delete()
+            self.gc_x2d.delete()
+            self.gc_x2.delete()
+            self.gc_x3d.delete()
+            self.gc_x3.delete()
+            self.gc_R11d.delete()
+            self.gc_R11.delete()
+        self.t += self.dt  # update time
+        self.cmd_count += 1
+        self.gc_x1.plot(self.t, quad_pos[0])
+        self.gc_x2.plot(self.t, quad_pos[1])
+        self.gc_x3.plot(self.t, quad_pos[2])
+        self.gc_R11.plot(self.t, state_vis[6])        
+        if self.cmd_count == 1 or self.cmd_count%40 == 0:
+            self.gc_x1d.plot(self.t, self.xd_vis[0])
+            self.gc_x2d.plot(self.t, self.xd_vis[1])
+            self.gc_x3d.plot(self.t, self.xd_vis[2])
+            self.gc_R11d.plot(self.t, b1d_vis[0])
+        
         # Update quad body.
         self.render_quad1.pos.x = quad_pos[0]
         self.render_quad1.pos.y = quad_pos[1]
@@ -667,7 +712,7 @@ class QuadEnv(gym.Env):
         self.render_index += 1        
         """
 
-        rate(100) # FPS
+        rate(60) # FPS
 
         return True
 
