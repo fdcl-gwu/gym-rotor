@@ -136,7 +136,7 @@ class Learner:
                 eval_reward = self.eval_policy()
 
                 # Logging updates:
-                log_eval.write('{}\t {}\t {}\n'.format(self.total_timesteps, eval_reward))
+                log_eval.write('{}\t {}\n'.format(self.total_timesteps, eval_reward))
                 log_eval.flush()
 
                 # Save best model:
