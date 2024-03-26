@@ -71,8 +71,9 @@ class Learner:
 
         # Initialize the environment:
         obs_n, done_episode = self.env.reset(env_type='train', seed=self.seed), False
+        obs_n = [obs_n]
         action = np.zeros(4) # init action
-        max_total_reward = [0.8 * self.eval_max_steps, 0.8 * self.eval_max_steps]  # starte saving best models after agents achieve 80% of the total reward for each episode
+        max_total_reward = [0.5 * self.eval_max_steps]  # starte saving best models after agents achieve 80% of the total reward for each episode
         episode_reward = [0.]
         episode_timesteps = 0
 
@@ -86,13 +87,13 @@ class Learner:
             if self.total_timesteps < self.args.start_timesteps:  # select actions randomly
                 act_n = [np.random.rand(action_dim_n) * 2 - 1 for action_dim_n in self.args.action_dim_n]  # random actions between -1 and 1
             else:  # select actions from trained policies
-                obs_n = [obs_n]
                 act_n = [agent.choose_action(obs, explor_noise_std=self.explor_noise_std) for agent, obs in zip(self.agent_n, obs_n)]
             action = np.concatenate((act_n), axis=None)
             self.env.set_prev_currunt_acts(prev_act, action)
 
             # Perform actions in the environment:
             obs_next_n, r_n, done_n, _, _ = self.env.step(copy.deepcopy(action))
+            obs_next_n = [obs_next_n]
 
             # Episode termination:
             state = self.env.get_current_state()
@@ -123,6 +124,7 @@ class Learner:
                 
                 # Reset environment:
                 obs_n, done_episode = self.env.reset(env_type='train', seed=self.seed), False
+                obs_n = [obs_n]
                 action = np.zeros(4) # init action
                 episode_reward = [0.]
                 episode_timesteps = 0
@@ -186,6 +188,7 @@ class Learner:
 
             # Reset envs, timesteps, and reward:
             obs_n = eval_env.reset(env_type='eval', seed=self.seed)
+            action = np.zeros(4) # init action
             episode_reward = [0.]
             episode_timesteps = 0
 
@@ -200,8 +203,10 @@ class Learner:
                 error_obs_n = self.trajectory.get_error_state()
 
                 # Actions without exploration noise:
+                prev_act = action # previous action; a(t-1)
                 act_n = [agent.choose_action(obs, explor_noise_std=0.) for agent, obs in zip(self.agent_n, error_obs_n)] # obs_n
                 action = np.concatenate((act_n), axis=None)
+                eval_env.set_prev_currunt_acts(prev_act, action)
 
                 # Perform actions:
                 obs_next_n, r_n, done_n, _, _ = eval_env.step(copy.deepcopy(action))

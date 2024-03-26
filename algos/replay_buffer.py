@@ -36,7 +36,7 @@ class ReplayBuffer(object):
         self.count = (self.count + 1) % self.replay_buffer_size  # When the 'count' reaches max_size, it will be reset to 0.
         self.current_size = min(self.current_size + 1, self.replay_buffer_size)
 
-    def sample(self, ):
+    def sample(self):
         index = np.random.choice(self.current_size, size=self.batch_size, replace=False)
         batch_obs_n, batch_a_n, batch_r_n, batch_obs_next_n, batch_done_n = [], [], [], [], []
         for agent_id in range(self.N):

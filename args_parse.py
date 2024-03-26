@@ -23,7 +23,7 @@ def create_parser():
     parser.add_argument('--Ca', default=0.03, type=float, metavar='G', help='Action smooth coeff. (default: )')
     # Domain randomization: 
     parser.add_argument("--use_UDM", default=True, type=bool, help="Uniform domain randomization for sim-to-real")
-    parser.add_argument("--UDM_percentage", default=10, type=float, help="± randomness 0 ~ 100[%]")
+    parser.add_argument("--UDM_percentage", default=5, type=float, help="± randomness 0 ~ 100[%]")
 
     # args of agents:
     parser.add_argument("--start_timesteps", default=int(5e5), type=int, help='Number of steps for uniform-random action selection (default: int(5e5))')

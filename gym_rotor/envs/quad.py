@@ -24,7 +24,7 @@ class QuadEnv(gym.Env):
         args = parser.parse_args()
 
         # Quadrotor parameters:
-        self.m = 2.15 # mass of quad, [kg]
+        self.m = 1.85 # mass of quad, [kg]
         self.d = 0.23 # arm length, [m]
         self.J = np.diag([0.022, 0.022, 0.035]) # inertia matrix of quad, [kg m2]
         self.c_tf = 0.0135 # torque-to-thrust coefficients
@@ -244,16 +244,16 @@ class QuadEnv(gym.Env):
         x, v, R, W = state_decomposition(obs)
 
         # Errors:
-        eX = x - self.xd # position error
-        eV = v - self.vd # velocity error
+        ex = x - self.xd # position error
+        ev = v - self.vd # velocity error
 
         # Reward function:
-        reward_eX  = self.Cx*(1. - norm(eX, 2))
-        reward_eV  = -self.Cv*norm(eV, 2)
+        reward_eX  = self.Cx*(1. - norm(ex, 2))
+        reward_eV  = -self.Cv*norm(ev, 2)
         reward_eW  = -self.CW*norm(W, 2)
-        reward_Act = -self.Ca*(norm(self.currunt_act - self.prev_act, 2))
+        reward_act = -self.Ca*norm(self.currunt_act - self.prev_act, 2)
         
-        reward = self.reward_alive + (reward_eX + reward_eV + reward_eW + reward_Act)
+        reward = self.reward_alive + (reward_eX + reward_eV + reward_eW + reward_act)
         reward *= 0.1 # rescaled by a factor of 0.1
 
         return [reward]
