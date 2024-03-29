@@ -10,7 +10,7 @@ plt.rcParams['font.size'] = 18
 fontsize = 25
 
 # Data load and indexing:
-file_name = 'CTDE_log_02292024_132552'
+file_name = 'SARL_log_03272024_114322'
 log_date = np.loadtxt(os.path.join('./results', file_name + '.dat')) 
 start_index = 3
 end_index = len(log_date)
@@ -64,7 +64,7 @@ axs[3].set_xlabel('Time [s]', size=fontsize)
 
 for i in range(4):
     axs[i].set_xlim([0., t[-1]])
-    axs[i].set_ylim([env.min_force-0.3, env.max_force+0.3])
+    # axs[i].set_ylim([env.min_force-0.3, env.max_force+0.3])
     axs[i].grid(True, color='white', linestyle='-', linewidth=1.0)
     axs[i].locator_params(axis='y', nbins=4)
 for label in (axs[0].get_xticklabels() + axs[0].get_yticklabels()):
@@ -171,13 +171,13 @@ axs[0, 0].legend(ncol=1, prop={'size': fontsize}, loc='best')
 
 axs[1, 0].plot(t, R21, linewidth=3)
 axs[1, 0].set_ylabel('$R_{21}$', size=fontsize)
-axs[1, 0].legend(ncol=1, prop={'size': fontsize}, loc='best')
+# axs[1, 0].legend(ncol=1, prop={'size': fontsize}, loc='best')
 # axs[1, 0].set_title('$R_{21}$')
 
 axs[2, 0].plot(t, R31, linewidth=3)
 axs[2, 0].set_ylabel('$R_{31}$', size=fontsize)
 axs[2, 0].set_xlabel('Time [s]', size=fontsize)
-axs[2, 0].legend(ncol=1, prop={'size': fontsize}, loc='best')
+# axs[2, 0].legend(ncol=1, prop={'size': fontsize}, loc='best')
 # axs[2, 0].set_title('$R_{31}$')
 # axs[2, 0].set_yticks(np.arange(-0.05, 0.08, 0.04))
 
@@ -197,19 +197,19 @@ axs[2, 1].set_xlabel('Time [s]', size=fontsize)
 
 axs[0, 2].plot(t, R13, linewidth=3)
 axs[0, 2].set_ylabel('$R_{13}$', size=fontsize)
-axs[0, 2].legend(ncol=1, prop={'size': fontsize}, loc='best')
+# axs[0, 2].legend(ncol=1, prop={'size': fontsize}, loc='best')
 # axs[0, 2].set_title('$R_{13}$')
 # axs[0, 2].set_yticks(np.arange(-0.10, 0.05, 0.05))
 
 axs[1, 2].plot(t, R23, linewidth=3)
 axs[1, 2].set_ylabel('$R_{23}$', size=fontsize)
-axs[1, 2].legend(ncol=1, prop={'size': fontsize}, loc='best')
+# axs[1, 2].legend(ncol=1, prop={'size': fontsize}, loc='best')
 # axs[1, 2].set_title('$R_{23}$')
 
 axs[2, 2].plot(t, R33, linewidth=3)
 axs[2, 2].set_ylabel('$R_{33}$', size=fontsize)
 axs[2, 2].set_xlabel('Time [s]', size=fontsize)
-axs[2, 2].legend(ncol=1, prop={'size': fontsize}, loc='best')
+# axs[2, 2].legend(ncol=1, prop={'size': fontsize}, loc='best')
 # axs[2, 2].set_title('$R_{33}$')
 # axs[2, 2].set_yticks(np.arange(0.990, 1.0, 0.004))
 

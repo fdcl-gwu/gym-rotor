@@ -15,7 +15,7 @@ def create_parser():
     parser.add_argument('--max_timesteps', default=int(5e6), type=int, help='Number of total timesteps (default: 7e6)')
     parser.add_argument("--num_eval", type=float, default=10, help="Number of episodes to evaluate our trained model")
     parser.add_argument("--eval_freq", default=1e4, type=int, help='How often (time steps) evaluate our trained model (default: 1e4)')       
-    parser.add_argument('--eval_max_steps', default=5, type=int, help='[sec] Maximum number of steps in each episode for evaluation (default: 5)')
+    parser.add_argument('--eval_max_steps', default=8, type=int, help='[sec] Maximum number of steps in each episode for evaluation (default: 5)')
     # Coefficients in reward function:
     parser.add_argument('--Cx', default=2.0, type=float, metavar='G', help='Position coeff. (default: )')
     parser.add_argument('--Cv', default=0.15, type=float, metavar='G', help='Velocity coeff. (default: )')
@@ -47,7 +47,7 @@ def create_parser():
     # Regularizing action policies for smooth control:
     parser.add_argument('--lam_T', default=0.2, type=int, metavar='N', help='Temporal Smoothness (default: 0.5~0.8)')
     parser.add_argument('--lam_S', default=0.3, type=int, metavar='N', help='Spatial Smoothness (default: 0.3~0.5)')
-    parser.add_argument('--lam_M', default=0.3, type=int, metavar='N', help='Magnitude Smoothness (default: 0.2~0.5)')
+    parser.add_argument('--lam_M', default=0.4, type=int, metavar='N', help='Magnitude Smoothness (default: 0.2~0.5)')
 
     # args of replay buffer:
     parser.add_argument('--batch_size', default=256, type=int, metavar='N', help='Batch size of actor and critic networks (default: 256)')

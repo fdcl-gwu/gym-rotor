@@ -73,7 +73,7 @@ class Learner:
         obs_n, done_episode = self.env.reset(env_type='train', seed=self.seed), False
         obs_n = [obs_n]
         action = np.zeros(4) # init action
-        max_total_reward = [0.5 * self.eval_max_steps]  # starte saving best models after agents achieve 80% of the total reward for each episode
+        max_total_reward = [0.]
         episode_reward = [0.]
         episode_timesteps = 0
 

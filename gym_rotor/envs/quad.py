@@ -69,7 +69,6 @@ class QuadEnv(gym.Env):
 
         # Coefficients in reward function:
         self.framework = args.framework
-        self.reward_alive = 0.  # ≥ 0 is a bonus value earned by the agent for staying alive
         self.reward_crash = -1. # Out of boundary or crashed!
         self.Cx = args.Cx # pos coef.
         self.Cv = args.Cv # vel coef.
@@ -253,7 +252,7 @@ class QuadEnv(gym.Env):
         reward_eW  = -self.CW*norm(W, 2)
         reward_act = -self.Ca*norm(self.currunt_act - self.prev_act, 2)
         
-        reward = self.reward_alive + (reward_eX + reward_eV + reward_eW + reward_act)
+        reward = reward_eX + reward_eV + reward_eW + reward_act
         reward *= 0.1 # rescaled by a factor of 0.1
 
         return [reward]
