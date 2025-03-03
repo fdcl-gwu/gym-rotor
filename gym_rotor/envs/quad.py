@@ -308,14 +308,14 @@ class QuadEnv(gym.Env):
             self.init_W = self.W_lim*0.5 # 50%; initial ang vel error, [rad/s]
         elif env_type == 'eval':
             self.init_x = 0.2 # initial pos error,[m]
-            self.init_v = self.v_lim*0.0 # initial vel error, [m/s]
+            self.init_v = self.v_lim*0.05 # initial vel error, [m/s]
             self.init_R = 0 * self.D2R # ±0 deg 
-            self.init_W = self.W_lim*0.0 # initial ang vel error, [rad/s]
+            self.init_W = self.W_lim*0.05 # initial ang vel error, [rad/s]
 
 
     def set_random_parameters(self, env_type='train'):
         # Nominal quadrotor parameters:
-        self.m = 2.15 # mass of quad, [kg]
+        self.m = 1.85 # mass of quad, [kg]
         self.d = 0.23 # arm length, [m]
         J1, J2, J3 = 0.022, 0.022, 0.035
         self.J = np.diag([J1, J2, J3]) # inertia matrix of quad, [kg m2]
@@ -340,9 +340,7 @@ class QuadEnv(gym.Env):
             self.J  = np.diag([J1, J2, J3]) # [kg m2]
             self.c_tf = uniform(low=(self.c_tf - c_tf_range), high=(self.c_tf + c_tf_range))
             self.c_tw = uniform(low=(self.c_tw - c_tw_range), high=(self.c_tw + c_tw_range))
-            
-            # TODO: Motor and Sensor noise: thrust_noise_ratio, sigma, cutoff_freq
-            
+                        
         # Force and Moment:
         self.f = self.m * self.g # magnitude of total thrust to overcome  
                                     # gravity and mass (No air resistance), [N]

@@ -17,10 +17,10 @@ def get_equiv_state(state):
     Convert the input state to the equivariant state vector.
 
     Args:
-        state (torch.Tensor): The quadrotor state. Shape: (1, 21) or (1, 18)
+        state (torch.Tensor): The quadrotor state. Shape: (1, 18)
 
     Returns:
-        state_equiv (torch.Tensor): The equivariant state representation. Shape: (1, 20) or (1, 17)
+        state_equiv (torch.Tensor): The equivariant state representation. Shape: (1, 17)
     """
     # Quadrotor states:
     x, v, R_vec, W = state[0,0:3], state[0,3:6], state[0,6:15], state[0,15:18]
@@ -36,7 +36,6 @@ def get_equiv_state(state):
     R_equiv = R_e3 @ R
     R_vec_equiv = R_equiv.T.reshape(9) # R.reshape(9, 1, order='F')
     state_equiv = torch.cat((x_equiv[[0,2]], v_equiv, R_vec_equiv, W), dim=0)
-    # state_equiv = torch.cat((x_equiv, v_equiv, R_vec_equiv, W), dim=0)
 
     return state_equiv
 
@@ -46,10 +45,10 @@ def get_equiv_state_batch(state):
     Convert the input state to the equivariant state representation for a batch of states.
 
     Args:
-        state (torch.Tensor): The input state. Shape: (N, 21) or (N, 18)
+        state (torch.Tensor): The input state. Shape: (N, 18)
 
     Returns:
-        state_equiv (torch.Tensor): The equivariant state representation. Shape: (N, 20) or (N, 17)
+        state_equiv (torch.Tensor): The equivariant state representation. Shape: (N, 17)
     """
     # Quadrotor states:
     x, v, R_vec, W = state[:,0:3], state[:,3:6], state[:,6:15], state[:,15:18]

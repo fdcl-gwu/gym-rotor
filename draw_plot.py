@@ -10,7 +10,7 @@ plt.rcParams['font.size'] = 18
 fontsize = 25
 
 # Data load and indexing:
-file_name = 'SARL_log_03272024_114322'
+file_name = 'SARL_log_02262025_104819'
 log_date = np.loadtxt(os.path.join('./results', file_name + '.dat')) 
 start_index = 3
 end_index = len(log_date)
@@ -36,8 +36,9 @@ R12, R22, R32 = obs[:, 9],  obs[:, 10], obs[:, 11]
 R13, R23, R33 = obs[:, 12], obs[:, 13], obs[:, 14]  
 W1, W2, W3 = obs[:, 15]*env.W_lim, obs[:, 16]*env.W_lim, obs[:, 17]*env.W_lim
 
-# Actions:
-f1, f2, f3, f4 = act[:, 0], act[:, 1], act[:, 2], act[:, 3] 
+# Actions: Linear scale, [-1, 1] -> [min_act, max_act] 
+forces = (env.scale_act * act + env.avrg_act).clip(env.min_force, env.max_force)
+f1, f2, f3, f4 = forces[:, 0], forces[:, 1], forces[:, 2], forces[:, 3] 
 
 # Commands:
 xd1, xd2, xd3 = cmd[:, 0]*env.x_lim, cmd[:, 1]*env.x_lim, cmd[:, 2]*env.x_lim
