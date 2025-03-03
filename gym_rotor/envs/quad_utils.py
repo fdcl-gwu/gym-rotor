@@ -120,7 +120,7 @@ def get_current_Rd(R):
     return R_proj
 
 
-def ensure_SO3(R, tolerance=1e-6):
+def ensure_SO3(R, tolerance=1e-5):
     """ Make sure the given input array is in SO(3).
 
     Args:
@@ -134,7 +134,7 @@ def ensure_SO3(R, tolerance=1e-6):
     magnitude = np.linalg.det(R)
 
     # R matrix should satisfy R^T@R = I and det(R) = 1:
-    if np.allclose(R.T@R,np.eye(3),rtol=tolerance) and np.isclose(magnitude,1.,rtol=tolerance):
+    if np.allclose(R.T@R,np.eye(3),rtol=tolerance,atol=tolerance) and np.isclose(magnitude,1.,rtol=tolerance):
         return R
     else: 
         U, s, VT = psvd(R)
@@ -224,8 +224,13 @@ def rotationMatrixToEulerAngles(R):
 
 
 def psvd(A):
-    assert A.shape == (3,3)
-    U, s, VT = svd(A)
+    # assert A.shape == (3,3)
+    try:
+        U, s, VT = svd(A)
+    except np.linalg.LinAlgError:
+        print("R = ", A, ". SVD did not converge. Retrying with perturbed matrix.")
+        A += np.random.normal(0, 1e-6, A.shape)  # Small perturbation
+        U, s, VT = np.linalg.svd(A)  # Retry SVD
     detU = det(U)
     detV = det(VT)
     U[:,2] = U[:,2]*detU
