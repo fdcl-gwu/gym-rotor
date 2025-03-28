@@ -1,13 +1,15 @@
 
 # gym-rotor
 
-OpenAI Gym environments for a quadrotor UAV control
+OpenAI Gym environments for a quadrotor UAV control, combined with modular RL and Equivariant RL approaches.
+
+> **NOTE**: For training code presented at the ACC 2023 conference, *Equivariant reinforcement learning for quadrotor UAV*, please switch to the `ACC23` branch. For the ACC 2024 conference training code, *Multi-Agent Reinforcement Learning for the Low-Level Control of a Quadrotor UAV*, use the `ACC24` branch. After cloning the desired branch, please refer to the respective README.md for detailed instructions.
 
 <img src="https://github.com/fdcl-gwu/gym-rotor/assets/50692767/4434e07f-48ae-4d96-8407-3d815e913ca7" width=50%>
 
 ### ***Learn by Doing***
 
-This repository contains OpenAI Gym environments and PyTorch implementations of [TD3](https://arxiv.org/abs/1802.09477) and [MATD3](https://arxiv.org/abs/1910.01465), for low-level control of quadrotor unmanned aerial vehicles. 
+This repository contains OpenAI Gym environments and PyTorch implementations of [PPO](https://arxiv.org/abs/1707.06347), [SAC](https://arxiv.org/abs/1801.01290), and [TD3](https://arxiv.org/abs/1802.09477)/[MATD3](https://arxiv.org/abs/1910.01465), for low-level control of quadrotor unmanned aerial vehicles. 
 To better understand **What Deep RL Do**, see [OpenAI Spinning UP](https://spinningup.openai.com/en/latest/index.html).
 Please don't hesitate to create new issues or pull requests for any suggestions and corrections. 
 - We have recently switched from [Gym](https://www.gymlibrary.dev/) to [Gymnasium](https://gymnasium.farama.org/), but our previous Gym-based environments are still available [here](https://github.com/fdcl-gwu/gym-rotor/tree/gym).
@@ -86,23 +88,21 @@ python3 main.py --framework CTDE --seed 789
 ## Citation
 If you find this work useful in your own work or would like to cite it, please give credit to our work:
 ```bash
-@article{yu2023multi,
+@inproceedings{yu2024multi,
   title={Multi-Agent Reinforcement Learning for the Low-Level Control of a Quadrotor UAV},
   author={Yu, Beomyeol and Lee, Taeyoung},
-  journal={arXiv preprint arXiv:2311.06144},
-  year={2023}
-}
-
-@inproceedings{yu2023equivariant,
-  title={Equivariant Reinforcement Learning for Quadrotor UAV},
-  author={Yu, Beomyeol and Lee, Taeyoung},
-  booktitle={2023 American Control Conference (ACC)},
-  pages={2842--2847},
-  year={2023},
+  booktitle={2024 American Control Conference (ACC)},
+  pages={1537--1542},
+  year={2024},
   organization={IEEE}
 }
+
 ```
 
 ## Reference:
-- https://github.com/ethz-asl/reinmav-gym
-- https://github.com/Lizhi-sjtu/MARL-code-pytorch
+- [reinmav-gym](https://github.com/ethz-asl/reinmav-gym): Reinforcement Learning framework for MAVs using the OpenAI Gym environment
+- [PPO-Continuous-Pytorch](https://github.com/XinJingHao/PPO-Continuous-Pytorch): A clean and robust Pytorch implementation of PPO on continuous action space.
+- [pytorch-soft-actor-critic](https://github.com/pranz24/pytorch-soft-actor-critic): PyTorch implementation of soft actor critic
+- [TD3](https://github.com/sfujim/TD3): Author's PyTorch implementation of TD3 for OpenAI gym tasks
+- [MARL-code-pytorch](https://github.com/Lizhi-sjtu/MARL-code-pytorch): Concise pytorch implements of MARL algorithms, including MAPPO, MADDPG, MATD3, QMIX and VDN.
+
