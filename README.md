@@ -12,7 +12,6 @@ OpenAI Gym environments for a quadrotor UAV control, combined with modular RL an
 This repository contains OpenAI Gym environments and PyTorch implementations of [PPO](https://arxiv.org/abs/1707.06347), [SAC](https://arxiv.org/abs/1801.01290), and [TD3](https://arxiv.org/abs/1802.09477)/[MATD3](https://arxiv.org/abs/1910.01465), for low-level control of quadrotor unmanned aerial vehicles. 
 To better understand **What Deep RL Do**, see [OpenAI Spinning UP](https://spinningup.openai.com/en/latest/index.html).
 Please don't hesitate to create new issues or pull requests for any suggestions and corrections. 
-- We have recently switched from [Gym](https://www.gymlibrary.dev/) to [Gymnasium](https://gymnasium.farama.org/), but our previous Gym-based environments are still available [here](https://github.com/fdcl-gwu/gym-rotor/tree/gym).
 
 ## Installation
 ### Requirements

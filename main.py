@@ -6,7 +6,6 @@ import numpy as np
 import gymnasium as gym
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
-os.environ["CUDA_VISIBLE_DEVICES"] = "MIG-c340a596-fde8-5944-a3bf-5a40017ea818"
 
 import gym_rotor
 from gym_rotor.envs.quad_utils import *
