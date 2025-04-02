@@ -36,7 +36,7 @@ def create_parser():
 
     # args of agents:
     parser.add_argument('--rl_algo', default="TD3", help='Name of RL algorithm: TD3, SAC or PPO')
-    parser.add_argument("--use_equiv", default=True, type=bool, help="Train models with equivariant reinforcement learning")
+    parser.add_argument("--use_equiv", default=True, type=lambda x: (str(x).lower() == 'true'), help="Train models with equivariant reinforcement learning")
     parser.add_argument("--actor_hidden_dim", default=[16, 4], type=int, help='Number of nodes in hidden layers of actor net (default: [16, 4])')
     parser.add_argument("--critic_hidden_dim", default=62, type=int, help='Number of nodes in hidden layers of critic net (default: 62)')
     parser.add_argument("--lr_a", default=[3e-4, 3e-4], type=float, help="Learning rate of actor, alpha (default: 1e-5)")

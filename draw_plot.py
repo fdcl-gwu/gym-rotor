@@ -12,7 +12,7 @@ plt.rcParams['font.size'] = 18
 fontsize = 25
 
 # Data load and indexing:
-file_name = 'MODUL_log_20250303_120200'
+file_name = 'MONO_log_20250303_112829'
 log_date = np.loadtxt(os.path.join('./results', file_name + '.dat')) 
 start_index = 3
 end_index = len(log_date)
@@ -107,7 +107,10 @@ for label in (axs[2].get_xticklabels() + axs[2].get_yticklabels()):
 for label in (axs[3].get_xticklabels() + axs[3].get_yticklabels()):
 	label.set_fontsize(fontsize)
 if is_SAVE:
-    plt.savefig(os.path.join('./results', file_name[:4]+file_name[8:]+'_fM'+'.png'), bbox_inches='tight')
+    if args.framework == "MODUL":
+        plt.savefig(os.path.join('./results', file_name[:5]+file_name[9:]+'_fM'+'.png'), bbox_inches='tight')
+    elif args.framework == "MONO":
+        plt.savefig(os.path.join('./results', file_name[:4]+file_name[8:]+'_fM'+'.png'), bbox_inches='tight')
 
 #######################################################################
 ############################# Plot Forces #############################
@@ -140,7 +143,10 @@ for label in (axs[2].get_xticklabels() + axs[2].get_yticklabels()):
 for label in (axs[3].get_xticklabels() + axs[3].get_yticklabels()):
 	label.set_fontsize(fontsize)
 if is_SAVE:
-    plt.savefig(os.path.join('./results', file_name[:4]+file_name[8:]+'_T'+'.png'), bbox_inches='tight')
+    if args.framework == "MODUL":
+        plt.savefig(os.path.join('./results', file_name[:5]+file_name[9:]+'_T'+'.png'), bbox_inches='tight')
+    elif args.framework == "MONO":
+        plt.savefig(os.path.join('./results', file_name[:4]+file_name[8:]+'_T'+'.png'), bbox_inches='tight')
 
 ###################################################################################
 ############################# Plot States x, v, and W #############################
@@ -220,7 +226,10 @@ for label in (axs[2, 1].get_xticklabels() + axs[2, 1].get_yticklabels()):
 for label in (axs[2, 2].get_xticklabels() + axs[2, 2].get_yticklabels()):
 	label.set_fontsize(fontsize)
 if is_SAVE:
-    plt.savefig(os.path.join('./results', file_name[:4]+file_name[8:]+'_x_v_W'+'.png'), bbox_inches='tight')
+    if args.framework == "MODUL":
+        plt.savefig(os.path.join('./results', file_name[:5]+file_name[9:]+'_x_v_W'+'.png'), bbox_inches='tight')
+    elif args.framework == "MONO":
+        plt.savefig(os.path.join('./results', file_name[:4]+file_name[8:]+'_x_v_W'+'.png'), bbox_inches='tight')
 
 #########################################################################
 ############################# Plot States R #############################
@@ -305,7 +314,10 @@ for label in (axs[2, 2].get_xticklabels() + axs[2, 2].get_yticklabels()):
 	label.set_fontsize(fontsize)
 
 if is_SAVE:
-    plt.savefig(os.path.join('./results', file_name[:4]+file_name[8:]+'_R'+'.png'), bbox_inches='tight')
+    if args.framework == "MODUL":
+        plt.savefig(os.path.join('./results', file_name[:5]+file_name[9:]+'_R'+'.png'), bbox_inches='tight')
+    elif args.framework == "MONO":
+        plt.savefig(os.path.join('./results', file_name[:4]+file_name[8:]+'_R'+'.png'), bbox_inches='tight')
 
 ##########################################################################
 #################### Plot ex, eIx, eb1, and  eIb1R #######################
@@ -382,6 +394,9 @@ for label in (axs[2, 0].get_xticklabels() + axs[2, 0].get_yticklabels()):
 for label in (axs[2, 1].get_xticklabels() + axs[2, 1].get_yticklabels()):
 	label.set_fontsize(fontsize)
 if is_SAVE:
-    plt.savefig(os.path.join('./results', file_name[:4]+file_name[8:]+'_eIx_eIb1'+'.png'), bbox_inches='tight')
+    if args.framework == "MODUL":
+        plt.savefig(os.path.join('./results', file_name[:5]+file_name[9:]+'_eIx_eIb1'+'.png'), bbox_inches='tight')
+    elif args.framework == "MONO":
+        plt.savefig(os.path.join('./results', file_name[:4]+file_name[8:]+'_eIx_eIb1'+'.png'), bbox_inches='tight')
 else:
     plt.show()
